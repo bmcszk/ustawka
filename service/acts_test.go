@@ -17,12 +17,12 @@ type MockSejmClient struct {
 }
 
 func (m *MockSejmClient) GetActs(ctx context.Context, year int) ([]sejm.Act, error) {
-	args := m.Called(ctx, year)
+	args := m.Called(mock.Anything, year)
 	return args.Get(0).([]sejm.Act), args.Error(1)
 }
 
 func (m *MockSejmClient) GetActDetails(ctx context.Context, actID string) (*sejm.ActDetails, error) {
-	args := m.Called(ctx, actID)
+	args := m.Called(mock.Anything, actID)
 	return args.Get(0).(*sejm.ActDetails), args.Error(1)
 }
 
@@ -34,7 +34,7 @@ func TestGetAvailableYears(t *testing.T) {
 
 	// Test case 1: All years have data
 	for year := 2021; year <= currentYear; year++ {
-		mockClient.On("GetActs", ctx, year).Return([]sejm.Act{{Title: "Test Act"}}, nil)
+		mockClient.On("GetActs", mock.Anything, year).Return([]sejm.Act{{Title: "Test Act"}}, nil)
 	}
 
 	years, err := service.GetAvailableYears(ctx)
@@ -57,7 +57,7 @@ func TestGetAvailableYears(t *testing.T) {
 		} else {
 			acts = []sejm.Act{}
 		}
-		mockClient.On("GetActs", ctx, year).Return(acts, nil)
+		mockClient.On("GetActs", mock.Anything, year).Return(acts, nil)
 	}
 
 	years, err = service.GetAvailableYears(ctx)
@@ -85,7 +85,7 @@ func TestGetActsByYear(t *testing.T) {
 		{Title: "Act 4", Status: ""},
 	}
 
-	mockClient.On("GetActs", ctx, 2024).Return(acts, nil)
+	mockClient.On("GetActs", mock.Anything, 2024).Return(acts, nil)
 
 	data, err := service.GetActsByYear(ctx, 2024)
 	assert.NoError(t, err)
@@ -96,7 +96,7 @@ func TestGetActsByYear(t *testing.T) {
 	// Test case 2: No acts available
 	mockClient = new(MockSejmClient)
 	service = NewActService(mockClient)
-	mockClient.On("GetActs", ctx, 2024).Return([]sejm.Act{}, nil)
+	mockClient.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{}, nil)
 
 	data, err = service.GetActsByYear(ctx, 2024)
 	assert.Error(t, err)
@@ -116,7 +116,7 @@ func TestGetActDetails(t *testing.T) {
 		Published: "2024-01-01",
 	}
 
-	mockClient.On("GetActDetails", ctx, "DU/2024/123").Return(expectedDetails, nil)
+	mockClient.On("GetActDetails", mock.Anything, "DU/2024/123").Return(expectedDetails, nil)
 
 	details, err := service.GetActDetails(ctx, "2024", "123")
 	assert.NoError(t, err)
@@ -126,7 +126,7 @@ func TestGetActDetails(t *testing.T) {
 	mockClient = new(MockSejmClient)
 	service = NewActService(mockClient)
 	mockErr := errors.New("API error")
-	mockClient.On("GetActDetails", ctx, "DU/2024/123").Return((*sejm.ActDetails)(nil), mockErr)
+	mockClient.On("GetActDetails", mock.Anything, "DU/2024/123").Return((*sejm.ActDetails)(nil), mockErr)
 
 	details, err = service.GetActDetails(ctx, "2024", "123")
 	assert.Error(t, err)
