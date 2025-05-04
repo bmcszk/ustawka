@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"ustawka/metrics"
 	"ustawka/sejm"
 )
 
@@ -77,6 +78,7 @@ func NewActService(client SejmClient, database Database) *ActService {
 
 // GetAvailableYears returns a list of years that have acts available
 func (s *ActService) GetAvailableYears(ctx context.Context) ([]int, error) {
+	metrics.IncrementAPI()
 	currentYear := time.Now().Year()
 	years := make([]int, 0)
 	var lastErr error
@@ -97,10 +99,13 @@ func (s *ActService) GetAvailableYears(ctx context.Context) ([]int, error) {
 			if err != nil {
 				slog.Error("Error reading from cache", "year", year, "error", err)
 				// Continue to fetch from API if cache read fails
+			} else {
+				metrics.IncrementCacheHit()
 			}
 		}
 
 		if len(acts) == 0 {
+			metrics.IncrementCacheMiss()
 			// Create a new context with timeout only for the API call
 			apiCtx, cancel := context.WithTimeout(ctx, s.timeout)
 			// Fetch from API and update cache
@@ -116,6 +121,8 @@ func (s *ActService) GetAvailableYears(ctx context.Context) ([]int, error) {
 				lastErr = err
 				continue
 			}
+
+			metrics.IncrementSejmAPI()
 
 			// Store in cache using the original context
 			if err := s.db.StoreActs(ctx, year, acts); err != nil {
@@ -144,6 +151,7 @@ func (s *ActService) GetAvailableYears(ctx context.Context) ([]int, error) {
 
 // GetActsByYear retrieves acts for a specific year and organizes them for the Kanban board
 func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, error) {
+	metrics.IncrementAPI()
 	// Check cache first
 	cacheAge, err := s.db.GetCacheAge(ctx, year)
 	if err != nil {
@@ -158,10 +166,13 @@ func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, 
 		if err != nil {
 			slog.Error("Error reading from cache", "year", year, "error", err)
 			// Continue to fetch from API if cache read fails
+		} else {
+			metrics.IncrementCacheHit()
 		}
 	}
 
 	if len(acts) == 0 {
+		metrics.IncrementCacheMiss()
 		// Create a new context with timeout only for the API call
 		apiCtx, cancel := context.WithTimeout(ctx, s.timeout)
 		// Fetch from API and update cache
@@ -171,6 +182,8 @@ func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch acts: %w", err)
 		}
+
+		metrics.IncrementSejmAPI()
 
 		// Store in cache using the original context, even if acts is empty
 		if err := s.db.StoreActs(ctx, year, acts); err != nil {
@@ -209,31 +222,35 @@ func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, 
 	return data, nil
 }
 
-// GetActDetails retrieves detailed information about a specific act
+// GetActDetails retrieves details for a specific act
 func (s *ActService) GetActDetails(ctx context.Context, year, position string) (*sejm.ActDetails, error) {
-	actID := fmt.Sprintf("DU/%s/%s", year, position)
+	metrics.IncrementAPI()
+	actID := fmt.Sprintf("DU-%s-%s", year, position)
 
 	// Check cache first
 	details, err := s.db.GetActDetails(ctx, actID)
-	if err != nil {
-		slog.Error("Error reading from cache", "actID", actID, "error", err)
+	if err == nil && details != nil {
+		metrics.IncrementCacheHit()
+		return details, nil
 	}
 
-	if details == nil {
-		// Create a new context with timeout only for the API call
-		apiCtx, cancel := context.WithTimeout(ctx, s.timeout)
-		// Fetch from API and update cache
-		details, err = s.sejmClient.GetActDetails(apiCtx, actID)
-		cancel() // Cancel right after the API call
+	metrics.IncrementCacheMiss()
+	// Create a new context with timeout only for the API call
+	apiCtx, cancel := context.WithTimeout(ctx, s.timeout)
+	// Fetch from API
+	details, err = s.sejmClient.GetActDetails(apiCtx, actID)
+	cancel() // Cancel right after the API call
 
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch act details: %w", err)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch act details: %w", err)
+	}
 
-		// Store in cache using the original context
-		if err := s.db.StoreActDetails(ctx, details); err != nil {
-			slog.Error("Error storing in cache", "actID", actID, "error", err)
-		}
+	metrics.IncrementSejmAPI()
+
+	// Store in cache using the original context
+	if err := s.db.StoreActDetails(ctx, details); err != nil {
+		slog.Error("Error storing in cache", "act_id", actID, "error", err)
+		// Continue even if cache store fails
 	}
 
 	return details, nil

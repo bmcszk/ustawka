@@ -67,6 +67,7 @@ func NewServer() (*Server, error) {
 	r.Get("/api/years", handler.GetYears)
 	r.Get("/api/acts/DU/{year}", handler.GetActs)
 	r.Get("/api/acts/DU/{year}/{position}", handler.GetActDetails)
+	r.Get("/metrics", handlers.MetricsHandler)
 
 	return &Server{
 		router:  r,
