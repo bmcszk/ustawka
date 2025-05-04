@@ -1,5 +1,10 @@
-.kanban-column {
-    min-height: calc(100vh - 200px);
+.board-column {
+    min-width: 300px;
+    max-width: 100%;
+    margin: 0 auto;
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    padding: 16px;
 }
 
 .act-card {

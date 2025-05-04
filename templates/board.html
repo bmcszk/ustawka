@@ -1,5 +1,5 @@
-{{define "kanban"}}
-<div class="kanban-column bg-white p-4 rounded-lg shadow">
+{{define "board"}}
+<div class="board-column bg-white p-4 rounded-lg shadow">
     <h2 class="text-lg font-semibold mb-4 text-yellow-600">W przygotowaniu</h2>
     <div class="space-y-4">
         {{range .Pending}}
@@ -8,7 +8,8 @@
             <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
             <div class="mt-2 flex justify-between items-center">
                 <span class="text-xs text-yellow-600 font-medium">{{.Status}}</span>
-                <a href="/api/acts/DU/{{.GetYearString}}/{{.Position}}"
+                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                    hx-target="#act-details" hx-swap="innerHTML"
                     class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
             </div>
         </div>
@@ -16,7 +17,7 @@
     </div>
 </div>
 
-<div class="kanban-column bg-white p-4 rounded-lg shadow">
+<div class="board-column bg-white p-4 rounded-lg shadow">
     <h2 class="text-lg font-semibold mb-4 text-red-600">Uchylone</h2>
     <div class="space-y-4">
         {{range .Uchylone}}
@@ -25,7 +26,8 @@
             <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
             <div class="mt-2 flex justify-between items-center">
                 <span class="text-xs text-red-600 font-medium">{{.Status}}</span>
-                <a href="/api/acts/DU/{{.GetYearString}}/{{.Position}}"
+                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                    hx-target="#act-details" hx-swap="innerHTML"
                     class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
             </div>
         </div>
@@ -33,7 +35,7 @@
     </div>
 </div>
 
-<div class="kanban-column bg-white p-4 rounded-lg shadow">
+<div class="board-column bg-white p-4 rounded-lg shadow">
     <h2 class="text-lg font-semibold mb-4 text-green-600">Obowiązujące</h2>
     <div class="space-y-4">
         {{range .Obowiazujace}}
@@ -42,11 +44,15 @@
             <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
             <div class="mt-2 flex justify-between items-center">
                 <span class="text-xs text-green-600 font-medium">{{.Status}}</span>
-                <a href="/api/acts/DU/{{.GetYearString}}/{{.Position}}"
+                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                    hx-target="#act-details" hx-swap="innerHTML"
                     class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
             </div>
         </div>
         {{end}}
     </div>
+</div>
+<div id="act-details" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <!-- Act details will be loaded here -->
 </div>
 {{end}}

@@ -8,6 +8,19 @@
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            if (evt.detail.target.id === 'act-details') {
+                const modal = document.getElementById('act-details');
+                modal.classList.remove('hidden');
+                modal.addEventListener('click', function (e) {
+                    if (e.target === modal) {
+                        modal.classList.add('hidden');
+                    }
+                });
+            }
+        });
+    </script>
 </head>
 
 <body class="bg-gray-100">
@@ -65,7 +78,7 @@
                                     return response.text();
                                 })
                                 .then(html => {
-                                    document.getElementById('kanban-board').innerHTML = html;
+                                    document.getElementById('board-container').innerHTML = html;
                                     errorDiv.classList.add('hidden');
                                 })
                                 .catch(error => {
@@ -87,8 +100,10 @@
     </nav>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div id="kanban-board" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- Kanban columns will be loaded here -->
+        <div class="container mx-auto px-4 py-8">
+            <div id="board-container" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Board columns will be loaded here -->
+            </div>
         </div>
     </main>
 </body>

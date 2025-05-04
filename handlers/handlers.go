@@ -68,9 +68,9 @@ func (h *Handler) GetActs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If the request is from HTMX, render the Kanban template
+	// If the request is from HTMX, render the board template
 	if r.Header.Get("HX-Request") == "true" {
-		err := h.templates.ExecuteTemplate(w, "kanban", data)
+		err := h.templates.ExecuteTemplate(w, "board", data)
 		if err != nil {
 			slog.Error("Error executing template", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -103,10 +103,45 @@ func (h *Handler) GetActDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If the request is from HTMX, render the act details template
+	if r.Header.Get("HX-Request") == "true" {
+		err := h.templates.ExecuteTemplate(w, "act_details", details)
+		if err != nil {
+			slog.Error("Error executing template", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+
+	// Otherwise return JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(details); err != nil {
 		slog.Error("Error encoding response", "error", err)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) ViewActDetails(w http.ResponseWriter, r *http.Request) {
+	year := chi.URLParam(r, "year")
+	position := chi.URLParam(r, "position")
+	if year == "" || position == "" {
+		http.Error(w, "Year and position parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	details, err := h.actService.GetActDetails(r.Context(), year, position)
+	if err != nil {
+		slog.Error("Error fetching act details", "error", err)
+		http.Error(w, "Failed to fetch act details", http.StatusInternalServerError)
+		return
+	}
+
+	err = h.templates.ExecuteTemplate(w, "act_details", details)
+	if err != nil {
+		slog.Error("Error executing template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 }

@@ -180,7 +180,7 @@ func TestGetActsByYear(t *testing.T) {
 		name          string
 		year          int
 		setupMocks    func(*MockSejmClient, *MockDB)
-		expectedData  *KanbanData
+		expectedData  *BoardData
 		expectedError bool
 		errorContains string
 	}{
@@ -195,7 +195,7 @@ func TestGetActsByYear(t *testing.T) {
 					{ID: "DU/2024/3", Status: "W przygotowaniu"},
 				}, nil).Once()
 			},
-			expectedData: &KanbanData{
+			expectedData: &BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{{ID: "DU/2024/2", Status: "uchylony"}},
 				Pending:      []sejm.Act{{ID: "DU/2024/3", Status: "W przygotowaniu"}},
@@ -213,7 +213,7 @@ func TestGetActsByYear(t *testing.T) {
 				}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
 			},
-			expectedData: &KanbanData{
+			expectedData: &BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{{ID: "DU/2024/2", Status: "uchylony"}},
 				Pending:      []sejm.Act{},
@@ -230,7 +230,7 @@ func TestGetActsByYear(t *testing.T) {
 				}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
 			},
-			expectedData: &KanbanData{
+			expectedData: &BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{},
 				Pending:      []sejm.Act{},
@@ -248,7 +248,7 @@ func TestGetActsByYear(t *testing.T) {
 				}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
 			},
-			expectedData: &KanbanData{
+			expectedData: &BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{},
 				Pending:      []sejm.Act{},

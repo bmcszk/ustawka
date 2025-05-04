@@ -1,0 +1,43 @@
+{{define "act_details"}}
+<div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-start mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">{{.Title}}</h1>
+            <div class="flex items-center space-x-4">
+                <span class="px-3 py-1 rounded-full text-sm font-medium
+                    {{if eq .Status " obowiązujący"}} bg-green-100 text-green-800 {{else if eq .Status "uchylony" }}
+                    bg-red-100 text-red-800 {{else}} bg-yellow-100 text-yellow-800 {{end}}">
+                    {{.Status}}
+                </span>
+                <span class="text-gray-500">{{.Published}}</span>
+            </div>
+        </div>
+        <a href="/" class="text-blue-600 hover:text-blue-800">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </a>
+    </div>
+
+    <div class="border-t border-gray-200 pt-6">
+        <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+            <div class="sm:col-span-1">
+                <dt class="text-sm font-medium text-gray-500">Numer aktu</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{.ID}}</dd>
+            </div>
+            <div class="sm:col-span-1">
+                <dt class="text-sm font-medium text-gray-500">Data publikacji</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{.Published}}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="mt-8">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Treść aktu</h2>
+        <div class="prose max-w-none">
+            <p class="text-gray-600">Treść aktu będzie dostępna wkrótce.</p>
+        </div>
+    </div>
+</div>
+{{end}}

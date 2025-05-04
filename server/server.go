@@ -22,7 +22,11 @@ type Server struct {
 
 func NewServer() (*Server, error) {
 	// Load templates
-	templates := template.Must(template.ParseFiles("templates/base.html", "templates/kanban.html"))
+	templates := template.Must(template.ParseFiles(
+		"templates/base.html",
+		"templates/board.html",
+		"templates/act_details.html",
+	))
 
 	// Create SEJM client
 	sejmClient := sejm.NewClient()
@@ -67,6 +71,7 @@ func NewServer() (*Server, error) {
 	r.Get("/api/years", handler.GetYears)
 	r.Get("/api/acts/DU/{year}", handler.GetActs)
 	r.Get("/api/acts/DU/{year}/{position}", handler.GetActDetails)
+	r.Get("/acts/DU/{year}/{position}", handler.ViewActDetails)
 	r.Get("/metrics", handlers.MetricsHandler)
 
 	return &Server{

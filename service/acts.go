@@ -33,7 +33,7 @@ type ActService struct {
 	cacheTTL   time.Duration
 }
 
-type KanbanData struct {
+type BoardData struct {
 	Obowiazujace []sejm.Act
 	Pending      []sejm.Act
 	Uchylone     []sejm.Act
@@ -149,8 +149,8 @@ func (s *ActService) GetAvailableYears(ctx context.Context) ([]int, error) {
 	return years, nil
 }
 
-// GetActsByYear retrieves acts for a specific year and organizes them for the Kanban board
-func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, error) {
+// GetActsByYear retrieves acts for a specific year and organizes them for the board
+func (s *ActService) GetActsByYear(ctx context.Context, year int) (*BoardData, error) {
 	metrics.IncrementAPI()
 	// Check cache first
 	cacheAge, err := s.db.GetCacheAge(ctx, year)
@@ -196,8 +196,8 @@ func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, 
 		}
 	}
 
-	// Organize acts by status for Kanban board
-	data := &KanbanData{
+	// Organize acts by status for board
+	data := &BoardData{
 		Obowiazujace: make([]sejm.Act, 0),
 		Pending:      make([]sejm.Act, 0),
 		Uchylone:     make([]sejm.Act, 0),
@@ -225,7 +225,7 @@ func (s *ActService) GetActsByYear(ctx context.Context, year int) (*KanbanData, 
 // GetActDetails retrieves details for a specific act
 func (s *ActService) GetActDetails(ctx context.Context, year, position string) (*sejm.ActDetails, error) {
 	metrics.IncrementAPI()
-	actID := fmt.Sprintf("DU-%s-%s", year, position)
+	actID := fmt.Sprintf("DU/%s/%s", year, position)
 
 	// Check cache first
 	details, err := s.db.GetActDetails(ctx, actID)
