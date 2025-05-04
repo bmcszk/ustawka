@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# IDE
+.idea
+.vscode
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Documentation
+README.md
+README.pl.md
+LICENSE
+LICENSE.pl 

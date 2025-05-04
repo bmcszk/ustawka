@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 	"ustawka/sejm"
@@ -17,6 +18,7 @@ type SejmClient interface {
 
 type ActService struct {
 	sejmClient SejmClient
+	timeout    time.Duration
 }
 
 type KanbanData struct {
@@ -25,9 +27,23 @@ type KanbanData struct {
 	Uchylone     []sejm.Act
 }
 
+// Default timeout for API requests
+const defaultTimeout = 5 * time.Second
+
 func NewActService(client SejmClient) *ActService {
+	timeout := defaultTimeout
+	if timeoutStr := os.Getenv("SEJM_API_TIMEOUT"); timeoutStr != "" {
+		if duration, err := time.ParseDuration(timeoutStr); err == nil {
+			timeout = duration
+			slog.Info("Using custom API timeout", "timeout", timeout)
+		} else {
+			slog.Warn("Invalid SEJM_API_TIMEOUT value, using default", "value", timeoutStr, "default", defaultTimeout)
+		}
+	}
+
 	return &ActService{
 		sejmClient: client,
+		timeout:    timeout,
 	}
 }
 
@@ -38,9 +54,17 @@ func (s *ActService) GetAvailableYears(ctx context.Context) ([]int, error) {
 
 	// Check each year from 2021 to current year
 	for year := 2021; year <= currentYear; year++ {
-		acts, err := s.sejmClient.GetActs(ctx, year)
+		// Create a new context with timeout for each year check
+		yearCtx, cancel := context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+
+		acts, err := s.sejmClient.GetActs(yearCtx, year)
 		if err != nil {
-			slog.Error("Error checking year", "year", year, "error", err)
+			if err == context.DeadlineExceeded {
+				slog.Warn("Timeout checking year", "year", year, "timeout", s.timeout)
+			} else {
+				slog.Error("Error checking year", "year", year, "error", err)
+			}
 			continue
 		}
 		if len(acts) > 0 {
