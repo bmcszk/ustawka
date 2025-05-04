@@ -20,6 +20,28 @@
                 });
             }
         });
+
+    // Close modal on escape key
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('act-details');
+            if (!modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+            }
+        }
+    });
+
+    // Initialize modal if it exists
+    document.addEventListener('DOMContentLoaded', function () {
+        const modal = document.getElementById('act-details');
+        if (modal) {
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                }
+            });
+        }
+    });
     </script>
 </head>
 
@@ -29,9 +51,10 @@
             <div class="flex justify-between h-16">
                 <div class="flex">
                     <div class="flex-shrink-0 flex items-center">
-                        <h1 class="text-2xl font-bold text-gray-800">Ustawka</h1>
+                        <a href="/" class="text-2xl font-bold text-gray-800">Ustawka</a>
                     </div>
                 </div>
+                {{if not .Title}}
                 <div class="flex items-center">
                     <select id="yearSelect"
                         class="rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
@@ -95,15 +118,20 @@
                         });
                     </script>
                 </div>
+                {{end}}
             </div>
         </div>
     </nav>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div class="container mx-auto px-4 py-8">
-            <div id="board-container" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <!-- Board columns will be loaded here -->
-            </div>
+            {{if .Title}}
+            {{template "act_details" .}}
+            {{else}}
+                <div id="board-container" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Board columns will be loaded here -->
+                </div>
+            {{end}}
         </div>
     </main>
 </body>

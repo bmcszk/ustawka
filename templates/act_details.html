@@ -1,42 +1,251 @@
 {{define "act_details"}}
-<div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
-    <div class="flex justify-between items-start mb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">{{.Title}}</h1>
-            <div class="flex items-center space-x-4">
-                <span class="px-3 py-1 rounded-full text-sm font-medium
-                    {{if eq .Status " obowiązujący"}} bg-green-100 text-green-800 {{else if eq .Status "uchylony" }}
-                    bg-red-100 text-red-800 {{else}} bg-yellow-100 text-yellow-800 {{end}}">
-                    {{.Status}}
-                </span>
-                <span class="text-gray-500">{{.Published}}</span>
-            </div>
+<div class="bg-white rounded-lg shadow-lg max-w-4xl w-full mx-auto">
+    <div class="p-6">
+        <div class="flex justify-between items-start mb-4">
+            <h2 class="text-2xl font-bold text-gray-900">{{.Title}}</h2>
         </div>
-        <a href="/" class="text-blue-600 hover:text-blue-800">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-        </a>
-    </div>
 
-    <div class="border-t border-gray-200 pt-6">
-        <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-            <div class="sm:col-span-1">
-                <dt class="text-sm font-medium text-gray-500">Numer aktu</dt>
-                <dd class="mt-1 text-sm text-gray-900">{{.ID}}</dd>
-            </div>
-            <div class="sm:col-span-1">
-                <dt class="text-sm font-medium text-gray-500">Data publikacji</dt>
-                <dd class="mt-1 text-sm text-gray-900">{{.Published}}</dd>
-            </div>
-        </dl>
-    </div>
+        <div class="space-y-6">
+            <!-- Basic Information -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-4">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">Status:</span>
+                        <span class="text-sm font-medium {{if eq .Status " obowiązujący"}}text-green-600{{else if eq
+                            .Status "uchylony" }}text-red-600{{else}}text-yellow-600{{end}}">
+                            {{.Status}}
+                        </span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">Typ:</span>
+                        <span class="text-sm text-gray-700">{{.Type}}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">Data publikacji:</span>
+                        <span class="text-sm text-gray-700">{{.Published}}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">Data ogłoszenia:</span>
+                        <span class="text-sm text-gray-700">{{.AnnouncementDate}}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">Data zmiany:</span>
+                        <span class="text-sm text-gray-700">{{.ChangeDate}}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">ID:</span>
+                        <span class="text-sm text-gray-700">{{.ID}}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-medium text-gray-500">Adres:</span>
+                        <span class="text-sm text-gray-700">{{.DisplayAddress}}</span>
+                    </div>
+                    </div>
+                    <div class="space-y-4">
+                        {{if .EntryIntoForce}}
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-medium text-gray-500">Wejście w życie:</span>
+                            <span class="text-sm text-gray-700">{{.EntryIntoForce}}</span>
+                        </div>
+                        {{end}}
+                        {{if .InForce}}
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-medium text-gray-500">Stan prawny:</span>
+                            <span class="text-sm text-gray-700">{{.InForce}}</span>
+                        </div>
+                        {{end}}
+                        {{if .Publisher}}
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-medium text-gray-500">Wydawca:</span>
+                            <span class="text-sm text-gray-700">{{.Publisher}}</span>
+                        </div>
+                        {{end}}
+                        {{if .ReleasedBy}}
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-medium text-gray-500">Wydający:</span>
+                            <span class="text-sm text-gray-700">{{index .ReleasedBy 0}}</span>
+                        </div>
+                        {{end}}
+                    </div>
+                    </div>
+                    
+                    <!-- Keywords -->
+                    {{if .Keywords}}
+                    <div class="border-t pt-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Słowa kluczowe</h3>
+                        <div class="flex flex-wrap gap-2">
+                            {{range .Keywords}}
+                            <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                    
+                    <!-- Texts -->
+                    {{if .Texts}}
+                    <div class="border-t pt-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Teksty aktu</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {{range .Texts}}
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">{{.FileName}}</span>
+                                    <span class="text-sm text-gray-500 ml-2">({{.Type}})</span>
+                                </div>
+                                <a href="https://dziennikustaw.gov.pl/{{.FileName}}" target="_blank"
+                                    class="text-sm text-blue-600 hover:text-blue-800">
+                                    Pobierz
+                                </a>
+                            </div>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                    
+                    <!-- References -->
+                    {{if .References}}
+                    <div class="border-t pt-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Powiązane akty prawne</h3>
+                    
+                        {{if .References.RepealedActs}}
+                        <div class="mb-4">
+                            <h4 class="text-md font-medium text-gray-900 mb-2">Akty uznane za uchylone</h4>
+                            <div class="space-y-2">
+                                {{range .References.RepealedActs}}
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div>
+                                        <span class="text-sm text-gray-900">{{.ID}}</span>
+                                        {{if .Date}}
+                                        <span class="text-sm text-gray-500 ml-2">({{.Date}})</span>
+                                        {{end}}
+                                    </div>
+                                    <a href="/acts/{{.ID}}" class="text-sm text-blue-600 hover:text-blue-800">
+                                        Zobacz szczegóły
+                                    </a>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    
+                        {{if .References.AmendingActs}}
+                        <div class="mb-4">
+                            <h4 class="text-md font-medium text-gray-900 mb-2">Akty zmieniające</h4>
+                            <div class="space-y-2">
+                                {{range .References.AmendingActs}}
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div>
+                                        <span class="text-sm text-gray-900">{{.ID}}</span>
+                                        {{if .Date}}
+                                        <span class="text-sm text-gray-500 ml-2">({{.Date}})</span>
+                                        {{end}}
+                                    </div>
+                                    <a href="/acts/{{.ID}}" class="text-sm text-blue-600 hover:text-blue-800">
+                                        Zobacz szczegóły
+                                    </a>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                {{end}}
+                
+                {{if .References.LegalBasis}}
+                <div class="mb-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-2">Podstawa prawna</h4>
+                    <div class="space-y-2">
+                        {{range .References.LegalBasis}}
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div>
+                                <span class="text-sm text-gray-900">{{.ID}}</span>
+                                {{if .Art}}
+                                <span class="text-sm text-gray-500 ml-2">({{.Art}})</span>
+                                {{end}}
+                            </div>
+                            <a href="/acts/{{.ID}}" class="text-sm text-blue-600 hover:text-blue-800">
+                                Zobacz szczegóły
+                            </a>
+                            </div>
+                        {{end}}
+                        </div>
+                        </div>
+                        {{end}}
+                        </div>
+                        {{end}}
+                        
+                        <!-- Additional Information -->
+                        {{if or .AuthorizedBody .Directives .Obligated .PreviousTitle}}
+                        <div class="border-t pt-4">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-3">Informacje dodatkowe</h3>
+                            <div class="space-y-4">
+                                {{if .AuthorizedBody}}
+                                <div>
+                                    <h4 class="text-md font-medium text-gray-900 mb-2">Organy upoważnione</h4>
+                                    <div class="space-y-1">
+                                        {{range .AuthorizedBody}}
+                                        <p class="text-sm text-gray-700">{{.}}</p>
+                                        {{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                        
+                                {{if .Directives}}
+                                <div>
+                                    <h4 class="text-md font-medium text-gray-900 mb-2">Dyrektywy</h4>
+                                    <div class="space-y-1">
+                                        {{if eq (printf "%T" .Directives) "[]string"}}
+                                        {{range .Directives}}
+                                        <p class="text-sm text-gray-700">{{.}}</p>
+                                        {{end}}
+                                        {{else}}
+                                        {{range .Directives}}
+                                        <p class="text-sm text-gray-700">{{.Name}}</p>
+                                        {{end}}
+                                        {{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                    
+                    {{if .Prints}}
+                    <div>
+                        <h4 class="text-md font-medium text-gray-900 mb-2">Wydania</h4>
+                        <div class="space-y-1">
+                            {{if eq (printf "%T" .Prints) "[]string"}}
+                            {{range .Prints}}
+                            <p class="text-sm text-gray-700">{{.}}</p>
+                            {{end}}
+                            {{else}}
+                            {{range .Prints}}
+                            <p class="text-sm text-gray-700">{{.Name}}</p>
+                            {{end}}
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                    
+                    {{if .Obligated}}
+                    <div>
+                        <h4 class="text-md font-medium text-gray-900 mb-2">Zobowiązani</h4>
+                        <div class="space-y-1">
+                            {{range .Obligated}}
+                            <p class="text-sm text-gray-700">{{.}}</p>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
 
-    <div class="mt-8">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">Treść aktu</h2>
-        <div class="prose max-w-none">
-            <p class="text-gray-600">Treść aktu będzie dostępna wkrótce.</p>
+                    {{if .PreviousTitle}}
+                    <div>
+                        <h4 class="text-md font-medium text-gray-900 mb-2">Poprzednie tytuły</h4>
+                        <div class="space-y-1">
+                            {{range .PreviousTitle}}
+                            <p class="text-sm text-gray-700">{{.}}</p>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                    </div>
+                    </div>
+                    {{end}}
         </div>
     </div>
 </div>

@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"ustawka/sejm"
@@ -53,6 +55,29 @@ func createTables(db *sql.DB) error {
 			title TEXT NOT NULL,
 			status TEXT NOT NULL,
 			published TEXT NOT NULL,
+			type TEXT NOT NULL,
+			address TEXT NOT NULL,
+			display_address TEXT NOT NULL,
+			position INTEGER NOT NULL,
+			year INTEGER NOT NULL,
+			announcement_date TEXT,
+			change_date TEXT,
+			publisher TEXT,
+			text_html BOOLEAN,
+			text_pdf BOOLEAN,
+			volume INTEGER,
+			entry_into_force TEXT,
+			in_force TEXT,
+			keywords TEXT,
+			keywords_names TEXT,
+			released_by TEXT,
+			texts TEXT,
+			act_references TEXT,
+			authorized_body TEXT,
+			directives TEXT,
+			obligated TEXT,
+			previous_title TEXT,
+			prints TEXT,
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)`,
@@ -154,15 +179,43 @@ func (db *DB) StoreActs(ctx context.Context, year int, acts []sejm.Act) error {
 
 // GetActDetails retrieves act details from the cache
 func (db *DB) GetActDetails(ctx context.Context, actID string) (*sejm.ActDetails, error) {
-	query := `SELECT id, title, status, published 
+	query := `SELECT id, title, status, published, type, address, display_address, position, year,
+			  announcement_date, change_date, publisher, text_html, text_pdf, volume,
+			  entry_into_force, in_force, keywords, keywords_names, released_by, texts,
+			  act_references, authorized_body, directives, obligated, previous_title, prints
 			  FROM act_details WHERE id = ?`
 
 	var details sejm.ActDetails
+	var keywords, keywordsNames, releasedBy, texts, actReferences, authorizedBody, directives, obligated, previousTitle, prints string
+
 	err := db.QueryRowContext(ctx, query, actID).Scan(
 		&details.ID,
 		&details.Title,
 		&details.Status,
 		&details.Published,
+		&details.Type,
+		&details.Address,
+		&details.DisplayAddress,
+		&details.Position,
+		&details.Year,
+		&details.AnnouncementDate,
+		&details.ChangeDate,
+		&details.Publisher,
+		&details.TextHTML,
+		&details.TextPDF,
+		&details.Volume,
+		&details.EntryIntoForce,
+		&details.InForce,
+		&keywords,
+		&keywordsNames,
+		&releasedBy,
+		&texts,
+		&actReferences,
+		&authorizedBody,
+		&directives,
+		&obligated,
+		&previousTitle,
+		&prints,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -171,26 +224,152 @@ func (db *DB) GetActDetails(ctx context.Context, actID string) (*sejm.ActDetails
 		return nil, err
 	}
 
+	// Parse JSON strings into slices
+	if err := json.Unmarshal([]byte(keywords), &details.Keywords); err != nil {
+		return nil, fmt.Errorf("failed to parse keywords: %w", err)
+	}
+	if err := json.Unmarshal([]byte(keywordsNames), &details.KeywordsNames); err != nil {
+		return nil, fmt.Errorf("failed to parse keywords names: %w", err)
+	}
+	if err := json.Unmarshal([]byte(releasedBy), &details.ReleasedBy); err != nil {
+		return nil, fmt.Errorf("failed to parse released by: %w", err)
+	}
+	if err := json.Unmarshal([]byte(texts), &details.Texts); err != nil {
+		return nil, fmt.Errorf("failed to parse texts: %w", err)
+	}
+	if err := json.Unmarshal([]byte(actReferences), &details.References); err != nil {
+		return nil, fmt.Errorf("failed to parse references: %w", err)
+	}
+	if err := json.Unmarshal([]byte(authorizedBody), &details.AuthorizedBody); err != nil {
+		return nil, fmt.Errorf("failed to parse authorized body: %w", err)
+	}
+	if err := json.Unmarshal([]byte(directives), &details.Directives); err != nil {
+		return nil, fmt.Errorf("failed to parse directives: %w", err)
+	}
+	if err := json.Unmarshal([]byte(obligated), &details.Obligated); err != nil {
+		return nil, fmt.Errorf("failed to parse obligated: %w", err)
+	}
+	if err := json.Unmarshal([]byte(previousTitle), &details.PreviousTitle); err != nil {
+		return nil, fmt.Errorf("failed to parse previous title: %w", err)
+	}
+	if err := json.Unmarshal([]byte(prints), &details.Prints); err != nil {
+		return nil, fmt.Errorf("failed to parse prints: %w", err)
+	}
+
 	return &details, nil
 }
 
 // StoreActDetails stores act details in the cache
 func (db *DB) StoreActDetails(ctx context.Context, details *sejm.ActDetails) error {
+	// Convert slices to JSON strings
+	keywords, err := json.Marshal(details.Keywords)
+	if err != nil {
+		return fmt.Errorf("failed to marshal keywords: %w", err)
+	}
+	keywordsNames, err := json.Marshal(details.KeywordsNames)
+	if err != nil {
+		return fmt.Errorf("failed to marshal keywords names: %w", err)
+	}
+	releasedBy, err := json.Marshal(details.ReleasedBy)
+	if err != nil {
+		return fmt.Errorf("failed to marshal released by: %w", err)
+	}
+	texts, err := json.Marshal(details.Texts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal texts: %w", err)
+	}
+	actReferences, err := json.Marshal(details.References)
+	if err != nil {
+		return fmt.Errorf("failed to marshal references: %w", err)
+	}
+	authorizedBody, err := json.Marshal(details.AuthorizedBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal authorized body: %w", err)
+	}
+	directives, err := json.Marshal(details.Directives)
+	if err != nil {
+		return fmt.Errorf("failed to marshal directives: %w", err)
+	}
+	obligated, err := json.Marshal(details.Obligated)
+	if err != nil {
+		return fmt.Errorf("failed to marshal obligated: %w", err)
+	}
+	previousTitle, err := json.Marshal(details.PreviousTitle)
+	if err != nil {
+		return fmt.Errorf("failed to marshal previous title: %w", err)
+	}
+	prints, err := json.Marshal(details.Prints)
+	if err != nil {
+		return fmt.Errorf("failed to marshal prints: %w", err)
+	}
+
 	query := `
-		INSERT INTO act_details (id, title, status, published, updated_at)
-		VALUES (?, ?, ?, ?, datetime('now'))
+		INSERT INTO act_details (
+			id, title, status, published, type, address, display_address, position, year,
+			announcement_date, change_date, publisher, text_html, text_pdf, volume,
+			entry_into_force, in_force, keywords, keywords_names, released_by, texts,
+			act_references, authorized_body, directives, obligated, previous_title, prints,
+			updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			status = excluded.status,
 			published = excluded.published,
+			type = excluded.type,
+			address = excluded.address,
+			display_address = excluded.display_address,
+			position = excluded.position,
+			year = excluded.year,
+			announcement_date = excluded.announcement_date,
+			change_date = excluded.change_date,
+			publisher = excluded.publisher,
+			text_html = excluded.text_html,
+			text_pdf = excluded.text_pdf,
+			volume = excluded.volume,
+			entry_into_force = excluded.entry_into_force,
+			in_force = excluded.in_force,
+			keywords = excluded.keywords,
+			keywords_names = excluded.keywords_names,
+			released_by = excluded.released_by,
+			texts = excluded.texts,
+			act_references = excluded.act_references,
+			authorized_body = excluded.authorized_body,
+			directives = excluded.directives,
+			obligated = excluded.obligated,
+			previous_title = excluded.previous_title,
+			prints = excluded.prints,
 			updated_at = datetime('now')
 	`
 
-	_, err := db.ExecContext(ctx, query,
+	_, err = db.ExecContext(ctx, query,
 		details.ID,
 		details.Title,
 		details.Status,
 		details.Published,
+		details.Type,
+		details.Address,
+		details.DisplayAddress,
+		details.Position,
+		details.Year,
+		details.AnnouncementDate,
+		details.ChangeDate,
+		details.Publisher,
+		details.TextHTML,
+		details.TextPDF,
+		details.Volume,
+		details.EntryIntoForce,
+		details.InForce,
+		string(keywords),
+		string(keywordsNames),
+		string(releasedBy),
+		string(texts),
+		string(actReferences),
+		string(authorizedBody),
+		string(directives),
+		string(obligated),
+		string(previousTitle),
+		string(prints),
 	)
 	return err
 }

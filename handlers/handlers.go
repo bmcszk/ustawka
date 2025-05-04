@@ -138,7 +138,7 @@ func (h *Handler) ViewActDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.templates.ExecuteTemplate(w, "act_details", details)
+	err = h.templates.ExecuteTemplate(w, "base.html", details)
 	if err != nil {
 		slog.Error("Error executing template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

@@ -30,16 +30,88 @@ type Act struct {
 }
 
 type ActDetails struct {
-	ID        string `json:"ELI"`
-	Title     string `json:"title"`
-	Status    string `json:"status"`
-	Published string `json:"promulgation"`
+	ID               string      `json:"ELI"`
+	Title            string      `json:"title"`
+	Status           string      `json:"status"`
+	Published        string      `json:"promulgation"`
+	Type             string      `json:"type"`
+	Address          string      `json:"address"`
+	DisplayAddress   string      `json:"displayAddress"`
+	Position         int         `json:"pos"`
+	Year             int         `json:"year"`
+	AnnouncementDate string      `json:"announcementDate"`
+	ChangeDate       string      `json:"changeDate"`
+	Publisher        string      `json:"publisher"`
+	TextHTML         bool        `json:"textHTML"`
+	TextPDF          bool        `json:"textPDF"`
+	Volume           int         `json:"volume"`
+	EntryIntoForce   string      `json:"entryIntoForce"`
+	InForce          string      `json:"inForce"`
+	Keywords         []string    `json:"keywords"`
+	KeywordsNames    []string    `json:"keywordsNames"`
+	ReleasedBy       []string    `json:"releasedBy"`
+	Texts            []Text      `json:"texts"`
+	References       References  `json:"references"`
+	AuthorizedBody   []string    `json:"authorizedBody"`
+	Directives       interface{} `json:"directives"`
+	Obligated        []string    `json:"obligated"`
+	PreviousTitle    []string    `json:"previousTitle"`
+	Prints           interface{} `json:"prints"`
+}
+
+type Text struct {
+	FileName string `json:"fileName"`
+	Type     string `json:"type"`
+}
+
+type References struct {
+	RepealedActs      []Reference `json:"Akty uznane za uchylone"`
+	AmendingActs      []Reference `json:"Akty zmieniające"`
+	LegalBasis        []Reference `json:"Podstawa prawna"`
+	LegalBasisWithArt []Reference `json:"Podstawa prawna z art."`
+}
+
+type Reference struct {
+	ID   string `json:"id"`
+	Date string `json:"date,omitempty"`
+	Art  string `json:"art,omitempty"`
+}
+
+type Attachment struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+}
+
+type RelatedAct struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Type  string `json:"type"`
+}
+
+type Change struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
 }
 
 type APIResponse struct {
 	Items      []Act `json:"items"`
 	Offset     int   `json:"offset"`
 	TotalCount int   `json:"totalCount"`
+}
+
+type Directive struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type Print struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func NewClient() *Client {
