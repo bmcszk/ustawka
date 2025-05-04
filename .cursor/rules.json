@@ -1,0 +1,11 @@
+{
+    "rules": [
+        {
+            "name": "Run unit tests after changes",
+            "description": "Runs unit tests after any code change to ensure functionality is maintained",
+            "pattern": "**/*.go",
+            "command": "go test -v -short ./...",
+            "runOn": "save"
+        }
+    ]
+}

@@ -1,6 +1,7 @@
 package sejm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 )
 
+// baseURL is the base URL for the Sejm API
 var baseURL = "https://api.sejm.gov.pl/eli"
 
 type Client struct {
@@ -47,11 +49,16 @@ func NewClient() *Client {
 	}
 }
 
-func (c *Client) GetActs(year int) ([]Act, error) {
+func (c *Client) GetActs(ctx context.Context, year int) ([]Act, error) {
 	url := fmt.Sprintf("%s/acts/DU/%d", c.baseURL, year)
 	slog.Debug("Fetching acts", "url", url)
 
-	resp, err := c.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching acts: %w", err)
 	}
@@ -75,11 +82,16 @@ func (c *Client) GetActs(year int) ([]Act, error) {
 	return apiResponse.Items, nil
 }
 
-func (c *Client) GetActDetails(id string) (*ActDetails, error) {
+func (c *Client) GetActDetails(ctx context.Context, id string) (*ActDetails, error) {
 	url := fmt.Sprintf("%s/acts/%s", c.baseURL, id)
 	slog.Debug("Fetching act details", "url", url)
 
-	resp, err := c.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching act details: %w", err)
 	}

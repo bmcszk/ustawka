@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"ustawka/handlers"
 	"ustawka/sejm"
+	"ustawka/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -24,8 +25,11 @@ func NewServer() (*Server, error) {
 	// Create SEJM client
 	sejmClient := sejm.NewClient()
 
+	// Create service layer with the concrete client
+	actService := service.NewActService(sejmClient)
+
 	// Create handler
-	handler := handlers.NewHandler(templates, sejmClient)
+	handler := handlers.NewHandler(templates, actService)
 
 	// Create router
 	r := chi.NewRouter()

@@ -2,33 +2,24 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
-	"time"
-	"ustawka/sejm"
+	"ustawka/service"
 
 	"github.com/go-chi/chi/v5"
 )
 
-type KanbanData struct {
-	Obowiazujace []sejm.Act
-	Pending      []sejm.Act
-	Uchylone     []sejm.Act
-}
-
 type Handler struct {
 	templates  *template.Template
-	sejmClient *sejm.Client
+	actService *service.ActService
 }
 
-func NewHandler(templates *template.Template, sejmClient *sejm.Client) *Handler {
+func NewHandler(templates *template.Template, actService *service.ActService) *Handler {
 	return &Handler{
 		templates:  templates,
-		sejmClient: sejmClient,
+		actService: actService,
 	}
 }
 
@@ -42,19 +33,11 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetYears(w http.ResponseWriter, r *http.Request) {
-	currentYear := time.Now().Year()
-	years := make([]int, 0)
-
-	// Check each year from 2021 to current year
-	for year := 2021; year <= currentYear; year++ {
-		acts, err := h.sejmClient.GetActs(year)
-		if err != nil {
-			slog.Error("Error checking year", "year", year, "error", err)
-			continue
-		}
-		if len(acts) > 0 {
-			years = append(years, year)
-		}
+	years, err := h.actService.GetAvailableYears(r.Context())
+	if err != nil {
+		slog.Error("Error getting available years", "error", err)
+		http.Error(w, "Failed to get available years", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -66,49 +49,23 @@ func (h *Handler) GetYears(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetActs(w http.ResponseWriter, r *http.Request) {
-	year := chi.URLParam(r, "year")
+	yearStr := chi.URLParam(r, "year")
+	if yearStr == "" {
+		http.Error(w, "Year parameter is required", http.StatusBadRequest)
+		return
+	}
 
-	yearInt, err := strconv.Atoi(year)
+	yearInt, err := strconv.Atoi(yearStr)
 	if err != nil {
-		slog.Error("Invalid year format", "year", year, "error", err)
-		http.Error(w, "Invalid year format", http.StatusBadRequest)
+		http.Error(w, "Invalid year parameter", http.StatusBadRequest)
 		return
 	}
 
-	// Check if the year is available
-	acts, err := h.sejmClient.GetActs(yearInt)
+	data, err := h.actService.GetActsByYear(r.Context(), yearInt)
 	if err != nil {
-		slog.Error("Error fetching acts", "year", yearInt, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Error fetching acts", "error", err)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
-	}
-
-	if len(acts) == 0 {
-		http.Error(w, fmt.Sprintf("No data available for year %d", yearInt), http.StatusNotFound)
-		return
-	}
-
-	// Organize acts by status
-	data := KanbanData{
-		Obowiazujace: make([]sejm.Act, 0),
-		Pending:      make([]sejm.Act, 0),
-		Uchylone:     make([]sejm.Act, 0),
-	}
-
-	for _, act := range acts {
-		status := strings.ToLower(strings.TrimSpace(act.Status))
-
-		switch status {
-		case "obowiązujący", "obowiazujacy":
-			data.Obowiazujace = append(data.Obowiazujace, act)
-		case "uchylony":
-			data.Uchylone = append(data.Uchylone, act)
-		default:
-			if status == "" {
-				act.Status = "W przygotowaniu"
-			}
-			data.Pending = append(data.Pending, act)
-		}
 	}
 
 	// If the request is from HTMX, render the Kanban template
@@ -125,8 +82,8 @@ func (h *Handler) GetActs(w http.ResponseWriter, r *http.Request) {
 	// Otherwise return JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		slog.Error("Error encoding JSON", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		slog.Error("Error encoding response", "error", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
@@ -134,19 +91,22 @@ func (h *Handler) GetActs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetActDetails(w http.ResponseWriter, r *http.Request) {
 	year := chi.URLParam(r, "year")
 	position := chi.URLParam(r, "position")
+	if year == "" || position == "" {
+		http.Error(w, "Year and position parameters are required", http.StatusBadRequest)
+		return
+	}
 
-	actID := fmt.Sprintf("DU/%s/%s", year, position)
-	details, err := h.sejmClient.GetActDetails(actID)
+	details, err := h.actService.GetActDetails(r.Context(), year, position)
 	if err != nil {
-		slog.Error("Error fetching act details", "actID", actID, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Error fetching act details", "error", err)
+		http.Error(w, "Failed to fetch act details", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(details); err != nil {
-		slog.Error("Error encoding JSON", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		slog.Error("Error encoding response", "error", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
