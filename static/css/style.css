@@ -1,0 +1,24 @@
+.kanban-column {
+    min-height: calc(100vh - 200px);
+}
+
+.act-card {
+    transition: all 0.3s ease;
+}
+
+.act-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.status-obowiazujacy {
+    border-left: 4px solid #10B981;
+}
+
+.status-uchylony {
+    border-left: 4px solid #EF4444;
+}
+
+.status-pending {
+    border-left: 4px solid #F59E0B;
+}

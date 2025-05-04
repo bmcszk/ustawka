@@ -1,0 +1,52 @@
+{{define "kanban"}}
+<div class="kanban-column bg-white p-4 rounded-lg shadow">
+    <h2 class="text-lg font-semibold mb-4 text-yellow-600">W przygotowaniu</h2>
+    <div class="space-y-4">
+        {{range .Pending}}
+        <div class="act-card bg-white p-4 rounded-lg shadow status-pending">
+            <h3 class="font-medium text-gray-900">{{.Title}}</h3>
+            <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
+            <div class="mt-2 flex justify-between items-center">
+                <span class="text-xs text-yellow-600 font-medium">{{.Status}}</span>
+                <a href="/api/acts/DU/{{.GetYearString}}/{{.Position}}"
+                    class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<div class="kanban-column bg-white p-4 rounded-lg shadow">
+    <h2 class="text-lg font-semibold mb-4 text-red-600">Uchylone</h2>
+    <div class="space-y-4">
+        {{range .Uchylone}}
+        <div class="act-card bg-white p-4 rounded-lg shadow status-uchylony">
+            <h3 class="font-medium text-gray-900">{{.Title}}</h3>
+            <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
+            <div class="mt-2 flex justify-between items-center">
+                <span class="text-xs text-red-600 font-medium">{{.Status}}</span>
+                <a href="/api/acts/DU/{{.GetYearString}}/{{.Position}}"
+                    class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<div class="kanban-column bg-white p-4 rounded-lg shadow">
+    <h2 class="text-lg font-semibold mb-4 text-green-600">Obowiązujące</h2>
+    <div class="space-y-4">
+        {{range .Obowiazujace}}
+        <div class="act-card bg-white p-4 rounded-lg shadow status-obowiazujacy">
+            <h3 class="font-medium text-gray-900">{{.Title}}</h3>
+            <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
+            <div class="mt-2 flex justify-between items-center">
+                <span class="text-xs text-green-600 font-medium">{{.Status}}</span>
+                <a href="/api/acts/DU/{{.GetYearString}}/{{.Position}}"
+                    class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

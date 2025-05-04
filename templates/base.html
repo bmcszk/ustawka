@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ustawka - Polski Monitor Prawny</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <h1 class="text-2xl font-bold text-gray-800">Ustawka</h1>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <select id="yearSelect"
+                        class="rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <script>
+                            fetch('/api/years')
+                                .then(response => response.json())
+                                .then(years => {
+                                    // Sort years in descending order
+                                    years.sort((a, b) => b - a);
+                                    years.forEach(year => {
+                                        const option = document.createElement('option');
+                                        option.value = year;
+                                        option.textContent = year;
+                                        document.getElementById('yearSelect').appendChild(option);
+                                    });
+                                    // Set the latest year as default
+                                    const latestYear = years[0];
+                                    document.getElementById('yearSelect').value = latestYear;
+                                    loadYearData(latestYear);
+                                })
+                                .catch(error => console.error('Error fetching years:', error));
+                        </script>
+                    </select>
+                    <div id="loading" class="htmx-indicator">
+                        Loading...
+                    </div>
+                    <div id="error-message" class="text-red-600 ml-4 hidden"></div>
+                    <script>
+                        function loadYearData(year) {
+                            const url = `/api/acts/DU/${year}`;
+                            const errorDiv = document.getElementById('error-message');
+                            const loadingDiv = document.getElementById('loading');
+
+                            loadingDiv.classList.remove('hidden');
+                            fetch(url, {
+                                headers: {
+                                    'HX-Request': 'true'
+                                }
+                            })
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`No data available for year ${year}`);
+                                    }
+                                    return response.text();
+                                })
+                                .then(html => {
+                                    document.getElementById('kanban-board').innerHTML = html;
+                                    errorDiv.classList.add('hidden');
+                                })
+                                .catch(error => {
+                                    errorDiv.textContent = `Error: ${error.message}`;
+                                    errorDiv.classList.remove('hidden');
+                                })
+                                .finally(() => {
+                                    loadingDiv.classList.add('hidden');
+                                });
+                        }
+
+                        document.getElementById('yearSelect').addEventListener('change', function () {
+                            loadYearData(this.value);
+                        });
+                    </script>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div id="kanban-board" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Kanban columns will be loaded here -->
+        </div>
+    </main>
+</body>
+
+</html>
