@@ -7,6 +7,8 @@ require (
 	github.com/go-chi/cors v1.2.1
 )
 
+require github.com/mattn/go-sqlite3 v1.14.28 // indirect
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

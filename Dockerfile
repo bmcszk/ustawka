@@ -1,8 +1,8 @@
 # Build stage
 FROM golang:1.24.2-alpine AS builder
 
-# Install git and build dependencies
-RUN apk add --no-cache git
+# Install git, SQLite and gcc for CGO
+RUN apk add --no-cache git sqlite gcc musl-dev
 
 # Set working directory
 WORKDIR /app
@@ -17,24 +17,34 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o ustawka
+RUN CGO_ENABLED=1 GOOS=linux go build -o ustawka
+
+# Create data directory for SQLite database
+RUN mkdir -p /app/data
 
 # Final stage
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:latest
+
+# Install SQLite for runtime
+RUN apk add --no-cache sqlite
 
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary and assets from builder
 COPY --from=builder /app/ustawka .
 COPY --from=builder /app/templates ./templates
 COPY --from=builder /app/static ./static
+COPY --from=builder /app/data ./data
 
-# Expose port
+# Set environment variables
+ENV SEJM_API_TIMEOUT=15s
+ENV SEJM_CACHE_TTL=24h
+ENV SEJM_DB_PATH=/app/data/sejm.db
+ENV USTAWKA_PORT=8080
+
+# Expose default port
 EXPOSE 8080
-
-# Environment variables
-ENV SEJM_API_TIMEOUT=10s
 
 # Run the application
 CMD ["./ustawka"] 

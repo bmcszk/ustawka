@@ -6,6 +6,27 @@
             "pattern": "**/*.go",
             "command": "go test -v -short ./...",
             "runOn": "save"
+        },
+        {
+            "name": "Check project map before changes",
+            "description": "Ensures changes align with project architecture and constraints",
+            "pattern": "**/*.go",
+            "context": ".cursor/project_map.md",
+            "runOn": "edit"
+        },
+        {
+            "name": "Update project map on significant changes",
+            "description": "Keeps project documentation up to date with architectural changes",
+            "pattern": "**/*.go",
+            "context": ".cursor/project_map.md",
+            "runOn": "save"
+        },
+        {
+            "name": "Performance validation",
+            "description": "Ensures changes respect documented performance characteristics",
+            "pattern": "**/*.go",
+            "context": ".cursor/project_map.md",
+            "runOn": "edit"
         }
     ]
 }

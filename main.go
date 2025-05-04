@@ -13,6 +13,15 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
+	// Get port from environment variable or use default
+	port := os.Getenv("USTAWKA_PORT")
+	if port == "" {
+		port = "8080"
+		slog.Info("Using default port", "port", port)
+	} else {
+		slog.Info("Using custom port", "port", port)
+	}
+
 	// Create and start server
 	srv, err := server.NewServer()
 	if err != nil {
@@ -20,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := srv.Start("8080"); err != nil {
+	if err := srv.Start(port); err != nil {
 		slog.Error("Server failed to start", "error", err)
 		os.Exit(1)
 	}

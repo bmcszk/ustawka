@@ -43,3 +43,7 @@ temp/
 # Debug files
 debug
 debug.test 
+
+# Database files
+sejm.db
+*/sejm.db 

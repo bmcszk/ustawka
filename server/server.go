@@ -4,6 +4,8 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"os"
+	"ustawka/db"
 	"ustawka/handlers"
 	"ustawka/sejm"
 	"ustawka/service"
@@ -25,8 +27,18 @@ func NewServer() (*Server, error) {
 	// Create SEJM client
 	sejmClient := sejm.NewClient()
 
-	// Create service layer with the concrete client
-	actService := service.NewActService(sejmClient)
+	// Initialize database
+	dbPath := os.Getenv("SEJM_DB_PATH")
+	if dbPath == "" {
+		dbPath = "sejm.db"
+	}
+	database, err := db.New(dbPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create service layer with the concrete client and database
+	actService := service.NewActService(sejmClient, database)
 
 	// Create handler
 	handler := handlers.NewHandler(templates, actService)
