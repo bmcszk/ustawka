@@ -90,12 +90,43 @@
                             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <div>
                                     <span class="text-sm font-medium text-gray-900">{{.FileName}}</span>
-                                    <span class="text-sm text-gray-500 ml-2">({{.Type}})</span>
+                                    <span class="text-sm text-gray-500 ml-2">
+                                        {{if eq .Type "O"}}
+                                        (Tekst oryginalny)
+                                        {{else if eq .Type "I"}}
+                                        (Tekst ujednolicony)
+                                        {{else if eq .Type "T"}}
+                                        (Tłumaczenie)
+                                        {{else if eq .Type "U"}}
+                                        (Tłumaczenie nieoficjalne)
+                                        {{else}}
+                                        ({{.Type}})
+                                        {{end}}
+                                    </span>
+                                    </div>
+                                    {{if eq .Type "I"}}
+                                    <div class="flex flex-col space-y-2">
+                                        {{if $.References.TekstJednolity}}
+                                        {{range $.References.TekstJednolity}}
+                                        <a href="/acts/{{.ID}}" class="text-sm text-blue-600 hover:text-blue-800">
+                                            Tekst ujednolicony ({{.ID}})
+                                        </a>
+                                        {{end}}
+                                        {{else if $.References.InfOTekstJednolitym}}
+                                        {{range $.References.InfOTekstJednolitym}}
+                                        <a href="/acts/{{.ID}}" class="text-sm text-blue-600 hover:text-blue-800">
+                                            Tekst ujednolicony ({{.ID}})
+                                        </a>
+                                        {{end}}
+                                        {{end}}
                                 </div>
-                                <a href="https://dziennikustaw.gov.pl/{{.FileName}}" target="_blank"
+                                {{else}}
+                                {{$pos := printf "%07d" $.Position}}
+                                <a href="https://dziennikustaw.gov.pl/DU/{{$.Year}}/{{$.Position}}/D{{$.Year}}{{$pos}}01.pdf" target="_blank"
                                     class="text-sm text-blue-600 hover:text-blue-800">
                                     Pobierz
                                 </a>
+                                {{end}}
                             </div>
                             {{end}}
                         </div>

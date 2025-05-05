@@ -59,49 +59,30 @@ type ActDetails struct {
 	Prints           interface{} `json:"prints"`
 }
 
+// Text represents a text version of an act
+// Type can be:
+//   - O: Original text (Tekst oryginalny)
+//   - I: Consolidated text (Tekst ujednolicony)
+//   - T: Translation (Tłumaczenie)
+//   - U: Unofficial translation (Tłumaczenie nieoficjalne)
 type Text struct {
 	FileName string `json:"fileName"`
 	Type     string `json:"type"`
 }
 
 type References struct {
-	RepealedActs      []Reference `json:"Akty uznane za uchylone"`
-	AmendingActs      []Reference `json:"Akty zmieniające"`
-	LegalBasis        []Reference `json:"Podstawa prawna"`
-	LegalBasisWithArt []Reference `json:"Podstawa prawna z art."`
+	RepealedActs        []Reference `json:"Akty uznane za uchylone"`
+	AmendingActs        []Reference `json:"Akty zmieniające"`
+	LegalBasis          []Reference `json:"Podstawa prawna"`
+	LegalBasisWithArt   []Reference `json:"Podstawa prawna z art."`
+	TekstJednolity      []Reference `json:"Tekst jednolity dla aktu"`
+	InfOTekstJednolitym []Reference `json:"Inf. o tekście jednolitym"`
 }
 
 type Reference struct {
 	ID   string `json:"id"`
 	Date string `json:"date,omitempty"`
 	Art  string `json:"art,omitempty"`
-}
-
-type Attachment struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Type        string `json:"type"`
-	Description string `json:"description,omitempty"`
-}
-
-type RelatedAct struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Type  string `json:"type"`
-}
-
-type Change struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Type        string `json:"type"`
-	Description string `json:"description,omitempty"`
-}
-
-type APIResponse struct {
-	Items      []Act `json:"items"`
-	Offset     int   `json:"offset"`
-	TotalCount int   `json:"totalCount"`
 }
 
 type Directive struct {
@@ -112,6 +93,12 @@ type Directive struct {
 type Print struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type APIResponse struct {
+	Items      []Act `json:"items"`
+	Offset     int   `json:"offset"`
+	TotalCount int   `json:"totalCount"`
 }
 
 func NewClient() *Client {
