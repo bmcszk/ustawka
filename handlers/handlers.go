@@ -11,11 +11,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Handler handles HTTP requests for the application
 type Handler struct {
 	templates  *template.Template
 	actService *service.ActService
 }
 
+// NewHandler creates a new Handler instance with dependencies
 func NewHandler(templates *template.Template, actService *service.ActService) *Handler {
 	return &Handler{
 		templates:  templates,
@@ -23,7 +25,8 @@ func NewHandler(templates *template.Template, actService *service.ActService) *H
 	}
 }
 
-func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
+// Home serves the main application page
+func (h *Handler) Home(w http.ResponseWriter, _ *http.Request) {
 	err := h.templates.ExecuteTemplate(w, "base.html", nil)
 	if err != nil {
 		slog.Error("Error executing template", "error", err)
@@ -32,7 +35,8 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) GetYears(w http.ResponseWriter, r *http.Request) {
+// HandleYears returns available years with legislative acts
+func (h *Handler) HandleYears(w http.ResponseWriter, r *http.Request) {
 	years, err := h.actService.GetAvailableYears(r.Context())
 	if err != nil {
 		slog.Error("Error getting available years", "error", err)
@@ -48,7 +52,8 @@ func (h *Handler) GetYears(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) GetActs(w http.ResponseWriter, r *http.Request) {
+// HandleActs returns acts for a specific year, organized by status
+func (h *Handler) HandleActs(w http.ResponseWriter, r *http.Request) {
 	yearStr := chi.URLParam(r, "year")
 	if yearStr == "" {
 		http.Error(w, "Year parameter is required", http.StatusBadRequest)
@@ -88,7 +93,8 @@ func (h *Handler) GetActs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) GetActDetails(w http.ResponseWriter, r *http.Request) {
+// HandleActDetails returns detailed information about a specific act
+func (h *Handler) HandleActDetails(w http.ResponseWriter, r *http.Request) {
 	year := chi.URLParam(r, "year")
 	position := chi.URLParam(r, "position")
 	if year == "" || position == "" {
@@ -123,6 +129,7 @@ func (h *Handler) GetActDetails(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ViewActDetails serves the act details page
 func (h *Handler) ViewActDetails(w http.ResponseWriter, r *http.Request) {
 	year := chi.URLParam(r, "year")
 	position := chi.URLParam(r, "position")

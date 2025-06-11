@@ -13,11 +13,13 @@ import (
 // baseURL is the base URL for the Sejm API
 var baseURL = "https://api.sejm.gov.pl/eli"
 
+// Client provides access to the Sejm API
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
 }
 
+// Act represents basic information about a legislative act
 type Act struct {
 	ID        string `json:"ELI"`
 	Title     string `json:"title"`
@@ -29,6 +31,7 @@ type Act struct {
 	Address   string `json:"address"`
 }
 
+// ActDetails contains comprehensive information about a legislative act
 type ActDetails struct {
 	ID               string      `json:"ELI"`
 	Title            string      `json:"title"`
@@ -53,10 +56,10 @@ type ActDetails struct {
 	Texts            []Text      `json:"texts"`
 	References       References  `json:"references"`
 	AuthorizedBody   []string    `json:"authorizedBody"`
-	Directives       interface{} `json:"directives"`
+	Directives       any `json:"directives"`
 	Obligated        []string    `json:"obligated"`
 	PreviousTitle    []string    `json:"previousTitle"`
-	Prints           interface{} `json:"prints"`
+	Prints           any `json:"prints"`
 }
 
 // Text represents a text version of an act
@@ -70,37 +73,30 @@ type Text struct {
 	Type     string `json:"type"`
 }
 
+// References contains legal references to related acts
 type References struct {
-	RepealedActs        []Reference `json:"Akty uznane za uchylone"`
-	AmendingActs        []Reference `json:"Akty zmieniające"`
-	LegalBasis          []Reference `json:"Podstawa prawna"`
-	LegalBasisWithArt   []Reference `json:"Podstawa prawna z art."`
-	TekstJednolity      []Reference `json:"Tekst jednolity dla aktu"`
-	InfOTekstJednolitym []Reference `json:"Inf. o tekście jednolitym"`
+	RepealedActs        []reference `json:"Akty uznane za uchylone"`
+	AmendingActs        []reference `json:"Akty zmieniające"`
+	LegalBasis          []reference `json:"Podstawa prawna"`
+	LegalBasisWithArt   []reference `json:"Podstawa prawna z art."`
+	TekstJednolity      []reference `json:"Tekst jednolity dla aktu"`
+	InfOTekstJednolitym []reference `json:"Inf. o tekście jednolitym"`
 }
 
-type Reference struct {
+type reference struct {
 	ID   string `json:"id"`
 	Date string `json:"date,omitempty"`
 	Art  string `json:"art,omitempty"`
 }
 
-type Directive struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
 
-type Print struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type APIResponse struct {
+type apiResponse struct {
 	Items      []Act `json:"items"`
 	Offset     int   `json:"offset"`
 	TotalCount int   `json:"totalCount"`
 }
 
+// NewClient creates a new Sejm API client
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{},
@@ -108,6 +104,15 @@ func NewClient() *Client {
 	}
 }
 
+// NewClientWithURL creates a new client with a custom base URL (primarily for testing)
+func NewClientWithURL(baseURL string) *Client {
+	return &Client{
+		httpClient: &http.Client{},
+		baseURL:    baseURL,
+	}
+}
+
+// GetActs retrieves all acts for a specific year
 func (c *Client) GetActs(ctx context.Context, year int) ([]Act, error) {
 	url := fmt.Sprintf("%s/acts/DU/%d", c.baseURL, year)
 	slog.Debug("Fetching acts", "url", url)
@@ -121,7 +126,11 @@ func (c *Client) GetActs(ctx context.Context, year int) ([]Act, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error fetching acts: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("Error closing response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API request failed with status code: %d", resp.StatusCode)
@@ -132,7 +141,7 @@ func (c *Client) GetActs(ctx context.Context, year int) ([]Act, error) {
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
-	var apiResponse APIResponse
+	var apiResponse apiResponse
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %v", err)
 	}
@@ -141,6 +150,7 @@ func (c *Client) GetActs(ctx context.Context, year int) ([]Act, error) {
 	return apiResponse.Items, nil
 }
 
+// GetActDetails retrieves detailed information about a specific act
 func (c *Client) GetActDetails(ctx context.Context, id string) (*ActDetails, error) {
 	url := fmt.Sprintf("%s/acts/%s", c.baseURL, id)
 	slog.Debug("Fetching act details", "url", url)
@@ -154,7 +164,11 @@ func (c *Client) GetActDetails(ctx context.Context, id string) (*ActDetails, err
 	if err != nil {
 		return nil, fmt.Errorf("error fetching act details: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("Error closing response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API request failed with status code: %d", resp.StatusCode)
