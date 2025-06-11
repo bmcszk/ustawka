@@ -47,3 +47,9 @@ debug.test
 # Database files
 sejm.db
 */sejm.db 
+
+# Tests
+unit-tests.xml
+
+# Claude
+.claude/

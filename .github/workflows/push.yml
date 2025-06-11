@@ -1,0 +1,29 @@
+name: Push
+
+on:
+  push:
+
+jobs:
+  test:
+    name: Push tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        check-latest: true
+
+    - name: Run lint
+      uses: golangci/golangci-lint-action@v8
+      # run: |
+      #   make install-lint
+      #   make lint
+
+    - name: Run unit tests
+      run: |
+        make install-gotestsum
+        make test-unit

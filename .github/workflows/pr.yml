@@ -1,0 +1,23 @@
+name: Pull request
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    name: Pull request tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        check-latest: true
+
+    - name: Run e2e tests
+      run: |
+        make install-gotestsum
+        make test-e2e
