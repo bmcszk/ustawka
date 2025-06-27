@@ -37,7 +37,12 @@ cd ustawka
 make deps
 ```
 
-3. Run the application:
+3. Set up development environment (installs git hooks):
+```bash
+./scripts/setup-hooks.sh
+```
+
+4. Run the application:
 ```bash
 make run
 ```
@@ -46,19 +51,38 @@ The application will be available at http://localhost:8080
 
 ## Development
 
+### Git Workflow
+
+This project uses git hooks to maintain code quality:
+
+- **Protected branches**: Direct commits to `master`, `main`, and `RELEASE` are blocked
+- **Pre-commit checks**: All commits must pass `make check` (linting + unit tests)
+- **Feature branches**: Use `feat/`, `fix/`, or `chore/` prefixed branches
+
+Recommended workflow:
+```bash
+git checkout -b feat/your-feature-name
+# Make your changes...
+git add .
+git commit -m "feat: add your feature description"
+git push -u origin feat/your-feature-name
+# Create pull request
+```
+
 ### Using Makefile
 
 The project includes a Makefile with common development tasks:
 
 ```bash
+make check      # Run linting and unit tests (required before commits)
 make build      # Build the application
 make run        # Run the application
 make test       # Run all tests
 make test-unit  # Run unit tests only
 make test-e2e   # Run end-to-end tests only
+make lint       # Run linting only
 make clean      # Clean build files
 make deps       # Install dependencies
-make help       # Show all available commands
 ```
 
 ### Testing
