@@ -33,7 +33,14 @@ func New(dbPath string) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{db}, nil
+	dbInstance := &DB{db}
+	
+	// Run database migrations
+	if err := dbInstance.RunMigrations(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	return dbInstance, nil
 }
 
 // createTables creates the necessary tables if they don't exist
