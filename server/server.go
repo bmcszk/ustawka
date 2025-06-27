@@ -137,6 +137,13 @@ func NewServer() (*Server, error) {
 		}
 	})
 
+	r.Get("/api/validation/stats", func(w http.ResponseWriter, _ *http.Request) {
+		stats := backgroundService.GetValidationStats()
+		if err := handlers.WriteJSON(w, stats); err != nil {
+			http.Error(w, "Failed to encode validation stats", http.StatusInternalServerError)
+		}
+	})
+
 	return &Server{
 		router:            r,
 		handler:           handler,

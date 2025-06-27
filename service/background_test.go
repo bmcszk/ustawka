@@ -109,6 +109,11 @@ func TestBackgroundServiceStart(t *testing.T) {
 					VotesProcessed:  50,
 					ErrorCount:      0,
 				}).Maybe()
+				// Add mock for monitoring service initialization
+				md.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
+					Return([]sejm.EnhancedAct{}, nil).Maybe()
+				// Add mock for Stop method
+				mp.On("Stop").Return().Maybe()
 			},
 			expectError: false,
 		},
@@ -141,6 +146,9 @@ func TestBackgroundServiceStart(t *testing.T) {
 			config.FullSyncInterval = 24 * time.Hour
 			config.EnrichmentInterval = 24 * time.Hour
 			config.HealthCheckInterval = 24 * time.Hour
+			// Disable features that require additional mocks
+			config.EnableStatusMonitoring = false
+			config.EnablePerformanceMetrics = false
 
 			mockSejmClient := &MockSejmClient{}
 	bs := service.NewBackgroundService(pipeline, enrichment, db, mockSejmClient, config)

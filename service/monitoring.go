@@ -18,7 +18,7 @@ type StatusChangeEvent struct {
 	NewStatus     string                 `json:"new_status"`
 	ChangeTime    time.Time              `json:"change_time"`
 	ChangeType    StatusChangeType       `json:"change_type"`
-	Metadata      map[string]interface{} `json:"metadata"`
+	Metadata      map[string]any `json:"metadata"`
 }
 
 // StatusChangeType represents the type of status change
@@ -301,7 +301,7 @@ func (ms *MonitoringService) detectChanges(previous, current *sejm.EnhancedAct) 
 			NewStatus:      current.DetailedStatus,
 			ChangeTime:     time.Now(),
 			ChangeType:     ms.categorizeStatusChange(previous.DetailedStatus, current.DetailedStatus),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"year":              current.Year,
 				"position":          current.Position,
 				"current_stage":     current.CurrentStage,
@@ -321,7 +321,7 @@ func (ms *MonitoringService) detectChanges(previous, current *sejm.EnhancedAct) 
 			NewStatus:      current.DetailedStatus,
 			ChangeTime:     time.Now(),
 			ChangeType:     StatusChangeTypeVoting,
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"sejm_votes_count":   len(current.SejmVotes),
 				"senate_votes_count": len(current.SenateVotes),
 				"previous_sejm_votes": len(previous.SejmVotes),
@@ -340,7 +340,7 @@ func (ms *MonitoringService) detectChanges(previous, current *sejm.EnhancedAct) 
 			NewStatus:      current.CurrentStage,
 			ChangeTime:     time.Now(),
 			ChangeType:     StatusChangeTypeProgression,
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"stage_change": true,
 				"previous_stage": previous.CurrentStage,
 				"new_stage": current.CurrentStage,
@@ -469,11 +469,11 @@ func (ms *MonitoringService) shouldNotifyForChange(change *StatusChangeEvent) bo
 }
 
 // GetStats returns monitoring statistics
-func (ms *MonitoringService) GetStats() map[string]interface{} {
+func (ms *MonitoringService) GetStats() map[string]any {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	
-	return map[string]interface{}{
+	return map[string]any{
 		"running":              ms.running,
 		"monitored_acts":       len(ms.lastSnapshot),
 		"events_generated":     ms.eventsGenerated,

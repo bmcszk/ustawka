@@ -34,6 +34,7 @@ type BackgroundService struct {
 	db                 Database
 	sejmClient         SejmClient
 	monitoringService  *MonitoringService
+	validationService  *DataValidationService
 	
 	// Configuration
 	config             *BackgroundConfig
@@ -108,12 +109,16 @@ func NewBackgroundService(
 	// Add default notification channels
 	monitoringService.AddNotificationChannel(NewLogNotificationChannel("default"))
 	
+	// Create validation service
+	validationService := NewDataValidationService(nil)
+	
 	return &BackgroundService{
 		pipeline:          pipeline,
 		enrichmentService: enrichmentService,
 		db:               database,
 		sejmClient:       sejmClient,
 		monitoringService: monitoringService,
+		validationService: validationService,
 		config:           config,
 		stopChan:         make(chan struct{}),
 	}
@@ -455,9 +460,7 @@ func (bs *BackgroundService) enrichActBatch(ctx context.Context, acts []sejm.Act
 		
 		// Validate enrichment if enabled
 		if bs.config.EnableDataValidation {
-			if issues := bs.enrichmentService.ValidateEnrichment(result); len(issues) > 0 {
-				slog.Warn("Enrichment validation issues", "act_id", act.ID, "issues", issues)
-			}
+			bs.validateEnrichmentResult(ctx, act.ID, result)
 		}
 		
 		// Store enriched act
@@ -627,8 +630,41 @@ func (bs *BackgroundService) TriggerEnrichment(ctx context.Context) error {
 }
 
 // GetMonitoringStats returns monitoring service statistics
-func (bs *BackgroundService) GetMonitoringStats() map[string]interface{} {
+func (bs *BackgroundService) GetMonitoringStats() map[string]any {
 	return bs.monitoringService.GetStats()
+}
+
+// GetValidationStats returns validation service statistics
+func (bs *BackgroundService) GetValidationStats() map[string]any {
+	return bs.validationService.GetValidationStats()
+}
+
+// validateEnrichmentResult validates enrichment results using both services
+func (bs *BackgroundService) validateEnrichmentResult(ctx context.Context, actID string, result *EnrichmentResult) {
+	// Use enrichment service validation first
+	if issues := bs.enrichmentService.ValidateEnrichment(result); len(issues) > 0 {
+		slog.Warn("Enrichment validation issues", "act_id", actID, "issues", issues)
+	}
+	
+	// Also run comprehensive data validation
+	validationResult := bs.validationService.ValidateAct(ctx, result.EnhancedAct)
+	if !validationResult.IsValid {
+		slog.Warn("Data validation issues found", 
+			"act_id", actID,
+			"error_count", validationResult.Summary.ErrorCount,
+			"warning_count", validationResult.Summary.WarningCount)
+		
+		// Log critical validation errors
+		for _, issue := range validationResult.Issues {
+			if issue.Level == ValidationLevelError {
+				slog.Error("Critical validation error", 
+					"act_id", actID,
+					"field", issue.Field,
+					"message", issue.Message,
+					"code", issue.Code)
+			}
+		}
+	}
 }
 
 // AddNotificationChannel adds a notification channel to the monitoring service
