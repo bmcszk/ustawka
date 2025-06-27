@@ -23,8 +23,14 @@ type Server struct {
 
 // NewServer creates a new server instance with all dependencies
 func NewServer() (*Server, error) {
-	// Load templates
-	templates := template.Must(template.ParseFiles(
+	// Load templates with custom functions
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+	}
+	
+	templates := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/base.html",
 		"templates/board.html",
 		"templates/act_details.html",

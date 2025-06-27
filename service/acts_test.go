@@ -96,6 +96,23 @@ func (m *MockDB) GetCacheAge(ctx context.Context, year int) (time.Duration, erro
 	return duration, args.Error(1)
 }
 
+func (m *MockDB) GetEnhancedActs(ctx context.Context, year int) ([]sejm.EnhancedAct, error) {
+	args := m.Called(ctx, year)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	acts, ok := args.Get(0).([]sejm.EnhancedAct)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return acts, args.Error(1)
+}
+
+func (m *MockDB) StoreEnhancedAct(ctx context.Context, act *sejm.EnhancedAct) error {
+	args := m.Called(ctx, act)
+	return args.Error(0)
+}
+
 func TestGetAvailableYears(t *testing.T) {
 	tests := getAvailableYearsTestCases()
 
@@ -247,6 +264,7 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Data from cache",
 			year: 2024,
 			setupMocks: func(_ *MockSejmClient, md *MockDB) {
+				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
 				md.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
 					{ID: "DU/2024/1", Status: "obowiązujący"},
@@ -258,6 +276,13 @@ func TestGetActsByYear(t *testing.T) {
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{{ID: "DU/2024/2", Status: "uchylony"}},
 				Pending:      []sejm.Act{{ID: "DU/2024/3", Status: "W przygotowaniu"}},
+				Submitted:          []sejm.EnhancedAct{},
+				CommitteeWork:      []sejm.EnhancedAct{},
+				SejmReadings:       []sejm.EnhancedAct{},
+				SenateReview:       []sejm.EnhancedAct{},
+				PresidentialReview: []sejm.EnhancedAct{},
+				Published:          []sejm.EnhancedAct{},
+				InForce:            []sejm.EnhancedAct{},
 			},
 			expectedError: false,
 		},
@@ -265,6 +290,7 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Cache expired, data from API",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(25*time.Hour, nil).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
 					{ID: "DU/2024/1", Status: "obowiązujący"},
@@ -276,6 +302,13 @@ func TestGetActsByYear(t *testing.T) {
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{{ID: "DU/2024/2", Status: "uchylony"}},
 				Pending:      []sejm.Act{},
+				Submitted:          []sejm.EnhancedAct{},
+				CommitteeWork:      []sejm.EnhancedAct{},
+				SejmReadings:       []sejm.EnhancedAct{},
+				SenateReview:       []sejm.EnhancedAct{},
+				PresidentialReview: []sejm.EnhancedAct{},
+				Published:          []sejm.EnhancedAct{},
+				InForce:            []sejm.EnhancedAct{},
 			},
 			expectedError: false,
 		},
@@ -283,6 +316,7 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Cache error, data from API",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(0*time.Hour, errors.New("cache error")).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
 					{ID: "DU/2024/1", Status: "obowiązujący"},
@@ -293,6 +327,13 @@ func TestGetActsByYear(t *testing.T) {
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{},
 				Pending:      []sejm.Act{},
+				Submitted:          []sejm.EnhancedAct{},
+				CommitteeWork:      []sejm.EnhancedAct{},
+				SejmReadings:       []sejm.EnhancedAct{},
+				SenateReview:       []sejm.EnhancedAct{},
+				PresidentialReview: []sejm.EnhancedAct{},
+				Published:          []sejm.EnhancedAct{},
+				InForce:            []sejm.EnhancedAct{},
 			},
 			expectedError: false,
 		},
@@ -300,6 +341,7 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Cache read error, data from API",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
 				md.On("GetActs", mock.Anything, 2024).Return(nil, errors.New("cache read error")).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
@@ -311,6 +353,13 @@ func TestGetActsByYear(t *testing.T) {
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{},
 				Pending:      []sejm.Act{},
+				Submitted:          []sejm.EnhancedAct{},
+				CommitteeWork:      []sejm.EnhancedAct{},
+				SejmReadings:       []sejm.EnhancedAct{},
+				SenateReview:       []sejm.EnhancedAct{},
+				PresidentialReview: []sejm.EnhancedAct{},
+				Published:          []sejm.EnhancedAct{},
+				InForce:            []sejm.EnhancedAct{},
 			},
 			expectedError: false,
 		},
@@ -318,6 +367,7 @@ func TestGetActsByYear(t *testing.T) {
 			name: "API error",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(25*time.Hour, nil).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return(nil, errors.New("API error")).Once()
 			},
@@ -329,6 +379,7 @@ func TestGetActsByYear(t *testing.T) {
 			name: "No data available",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(25*time.Hour, nil).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()

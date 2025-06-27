@@ -25,6 +25,10 @@ type Database interface {
 	GetActDetails(ctx context.Context, actID string) (*sejm.ActDetails, error)
 	StoreActDetails(ctx context.Context, details *sejm.ActDetails) error
 	GetCacheAge(ctx context.Context, year int) (time.Duration, error)
+	
+	// Enhanced Act operations
+	GetEnhancedActs(ctx context.Context, year int) ([]sejm.EnhancedAct, error)
+	StoreEnhancedAct(ctx context.Context, act *sejm.EnhancedAct) error
 }
 
 // ActService provides business logic for legislative acts
@@ -35,11 +39,21 @@ type ActService struct {
 	cacheTTL   time.Duration
 }
 
-// BoardData organizes acts by status for the Kanban board view
+// BoardData organizes acts by status for the enhanced Kanban board view
 type BoardData struct {
+	// Legacy fields for backward compatibility
 	Obowiazujace []sejm.Act
 	Pending      []sejm.Act
 	Uchylone     []sejm.Act
+	
+	// Enhanced lifecycle status columns
+	Submitted          []sejm.EnhancedAct
+	CommitteeWork      []sejm.EnhancedAct
+	SejmReadings       []sejm.EnhancedAct
+	SenateReview       []sejm.EnhancedAct
+	PresidentialReview []sejm.EnhancedAct
+	Published          []sejm.EnhancedAct
+	InForce            []sejm.EnhancedAct
 }
 
 // Default values
@@ -189,16 +203,27 @@ func (s *ActService) fetchAndCacheActs(ctx context.Context, year int) ([]sejm.Ac
 func (s *ActService) GetActsByYear(ctx context.Context, year int) (*BoardData, error) {
 	metrics.IncrementAPI()
 	
-	acts, err := s.getActsForYear(ctx, year)
+	// Try to get enhanced acts first
+	enhancedActs, err := s.db.GetEnhancedActs(ctx, year)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch acts: %w", err)
+		slog.Debug("Enhanced acts not available, falling back to basic acts", "year", year, "error", err)
 	}
+	
+	// If no enhanced acts available, fall back to basic acts
+	if len(enhancedActs) == 0 {
+		acts, err := s.getActsForYear(ctx, year)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch acts: %w", err)
+		}
 
-	if len(acts) == 0 {
-		return nil, fmt.Errorf("no data available for year %d", year)
+		if len(acts) == 0 {
+			return nil, fmt.Errorf("no data available for year %d", year)
+		}
+
+		return organizeActsByStatus(acts), nil
 	}
-
-	return organizeActsByStatus(acts), nil
+	
+	return organizeEnhancedActsByStatus(enhancedActs), nil
 }
 
 // organizeActsByStatus organizes acts by their status for the board view
@@ -207,6 +232,15 @@ func organizeActsByStatus(acts []sejm.Act) *BoardData {
 		Obowiazujace: make([]sejm.Act, 0),
 		Pending:      make([]sejm.Act, 0),
 		Uchylone:     make([]sejm.Act, 0),
+		
+		// Initialize enhanced status slices to empty, not nil
+		Submitted:          make([]sejm.EnhancedAct, 0),
+		CommitteeWork:      make([]sejm.EnhancedAct, 0),
+		SejmReadings:       make([]sejm.EnhancedAct, 0),
+		SenateReview:       make([]sejm.EnhancedAct, 0),
+		PresidentialReview: make([]sejm.EnhancedAct, 0),
+		Published:          make([]sejm.EnhancedAct, 0),
+		InForce:            make([]sejm.EnhancedAct, 0),
 	}
 
 	for _, act := range acts {
@@ -260,4 +294,78 @@ func (s *ActService) GetActDetails(ctx context.Context, year, position string) (
 	}
 
 	return details, nil
+}
+
+// organizeEnhancedActsByStatus organizes enhanced acts by their detailed status for the enhanced board view
+func organizeEnhancedActsByStatus(acts []sejm.EnhancedAct) *BoardData {
+	data := &BoardData{
+		// Initialize legacy slices for compatibility
+		Obowiazujace: make([]sejm.Act, 0),
+		Pending:      make([]sejm.Act, 0),
+		Uchylone:     make([]sejm.Act, 0),
+		
+		// Initialize enhanced status slices
+		Submitted:          make([]sejm.EnhancedAct, 0),
+		CommitteeWork:      make([]sejm.EnhancedAct, 0),
+		SejmReadings:       make([]sejm.EnhancedAct, 0),
+		SenateReview:       make([]sejm.EnhancedAct, 0),
+		PresidentialReview: make([]sejm.EnhancedAct, 0),
+		Published:          make([]sejm.EnhancedAct, 0),
+		InForce:            make([]sejm.EnhancedAct, 0),
+	}
+
+	for _, act := range acts {
+		addToLegacyColumns(data, act)
+		addToEnhancedColumns(data, act)
+	}
+
+	return data
+}
+
+// addToLegacyColumns adds acts to legacy columns for backward compatibility
+func addToLegacyColumns(data *BoardData, act sejm.EnhancedAct) {
+	basicAct := sejm.Act{
+		ID:        act.ID,
+		Title:     act.Title,
+		Status:    act.Status,
+		Published: act.Published,
+		Position:  act.Position,
+		Year:      act.Year,
+		Type:      act.Type,
+		Address:   act.Address,
+	}
+	
+	status := strings.ToLower(strings.TrimSpace(act.Status))
+	switch status {
+	case "obowiązujący", "obowiazujacy":
+		data.Obowiazujace = append(data.Obowiazujace, basicAct)
+	case "uchylony":
+		data.Uchylone = append(data.Uchylone, basicAct)
+	default:
+		data.Pending = append(data.Pending, basicAct)
+	}
+}
+
+// addToEnhancedColumns adds acts to enhanced status columns
+func addToEnhancedColumns(data *BoardData, act sejm.EnhancedAct) {
+	detailedStatus := strings.ToLower(strings.TrimSpace(act.DetailedStatus))
+	switch detailedStatus {
+	case "submitted":
+		data.Submitted = append(data.Submitted, act)
+	case "committee_first_reading", "committee_work":
+		data.CommitteeWork = append(data.CommitteeWork, act)
+	case "second_reading", "third_reading":
+		data.SejmReadings = append(data.SejmReadings, act)
+	case "senate_review", "senate_accepted", "senate_amended", "senate_rejected":
+		data.SenateReview = append(data.SenateReview, act)
+	case "presidential_review", "presidential_signed", "presidential_veto":
+		data.PresidentialReview = append(data.PresidentialReview, act)
+	case "published":
+		data.Published = append(data.Published, act)
+	case "in_force":
+		data.InForce = append(data.InForce, act)
+	default:
+		// Default to submitted if status is unknown
+		data.Submitted = append(data.Submitted, act)
+	}
 }

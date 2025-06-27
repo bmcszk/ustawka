@@ -1,58 +1,201 @@
 {{define "board"}}
-<div class="board-column bg-white p-4 rounded-lg shadow">
-    <h2 class="text-lg font-semibold mb-4 text-yellow-600">W przygotowaniu</h2>
-    <div class="space-y-4">
-        {{range .Pending}}
-        <div class="act-card bg-white p-4 rounded-lg shadow status-pending">
-            <h3 class="font-medium text-gray-900">{{.Title}}</h3>
-            <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
-            <div class="mt-2 flex justify-between items-center">
-                <span class="text-xs text-yellow-600 font-medium">{{.Status}}</span>
-                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
-                    hx-target="#act-details" hx-swap="innerHTML"
-                    class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
+<!-- Legislative Process Kanban Board with Enhanced Status Columns -->
+<div class="grid grid-cols-1 lg:grid-cols-6 gap-4 overflow-x-auto">
+
+    <!-- Submitted Column -->
+    <div class="board-column bg-white p-4 rounded-lg shadow min-w-64">
+        <h2 class="text-lg font-semibold mb-4 text-blue-600 flex items-center">
+            <span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+            Wpłynął do Sejmu
+            <span class="ml-2 text-sm bg-blue-100 text-blue-800 rounded-full px-2 py-1">{{len .Submitted}}</span>
+        </h2>
+        <div class="space-y-3">
+            {{range .Submitted}}
+            <div class="act-card bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg shadow-sm border-l-4 border-blue-500 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    {{if .InitiatorType}}<p class="text-xs text-gray-600">Inicjator: {{.InitiatorType}}</p>{{end}}
+                    {{if .DaysInStage}}<p class="text-xs text-blue-600">{{.DaysInStage}} dni w etapie</p>{{end}}
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-blue-200 text-blue-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-blue-600 font-medium">{{.CurrentStage}}</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-blue-600 hover:text-blue-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
             </div>
+            {{end}}
         </div>
-        {{end}}
     </div>
+
+    <!-- Committee Work Column -->
+    <div class="board-column bg-white p-4 rounded-lg shadow min-w-64">
+        <h2 class="text-lg font-semibold mb-4 text-purple-600 flex items-center">
+            <span class="w-3 h-3 bg-purple-500 rounded-full mr-2"></span>
+            Praca w komisjach
+            <span class="ml-2 text-sm bg-purple-100 text-purple-800 rounded-full px-2 py-1">{{len .CommitteeWork}}</span>
+        </h2>
+        <div class="space-y-3">
+            {{range .CommitteeWork}}
+            <div class="act-card bg-gradient-to-r from-purple-50 to-purple-100 p-3 rounded-lg shadow-sm border-l-4 border-purple-500 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    {{if .CommitteeCode}}<p class="text-xs text-gray-600">Komisja: {{.CommitteeCode}}</p>{{end}}
+                    {{if .RapporteurName}}<p class="text-xs text-gray-600">Sprawozdawca: {{.RapporteurName}}</p>{{end}}
+                    {{if .DaysInStage}}<p class="text-xs text-purple-600">{{.DaysInStage}} dni w etapie</p>{{end}}
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-purple-200 text-purple-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-purple-600 font-medium">{{.CurrentStage}}</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-purple-600 hover:text-purple-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- Sejm Readings Column -->
+    <div class="board-column bg-white p-4 rounded-lg shadow min-w-64">
+        <h2 class="text-lg font-semibold mb-4 text-orange-600 flex items-center">
+            <span class="w-3 h-3 bg-orange-500 rounded-full mr-2"></span>
+            Czytania w Sejmie
+            <span class="ml-2 text-sm bg-orange-100 text-orange-800 rounded-full px-2 py-1">{{len .SejmReadings}}</span>
+        </h2>
+        <div class="space-y-3">
+            {{range .SejmReadings}}
+            <div class="act-card bg-gradient-to-r from-orange-50 to-orange-100 p-3 rounded-lg shadow-sm border-l-4 border-orange-500 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    {{if .SejmVotes}}<p class="text-xs text-gray-600">Głosowań: {{len .SejmVotes}}</p>{{end}}
+                    {{if .DaysInStage}}<p class="text-xs text-orange-600">{{.DaysInStage}} dni w etapie</p>{{end}}
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-orange-200 text-orange-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-orange-600 font-medium">{{.CurrentStage}}</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-orange-600 hover:text-orange-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- Senate Review Column -->
+    <div class="board-column bg-white p-4 rounded-lg shadow min-w-64">
+        <h2 class="text-lg font-semibold mb-4 text-indigo-600 flex items-center">
+            <span class="w-3 h-3 bg-indigo-500 rounded-full mr-2"></span>
+            Rozpatrywanie w Senacie
+            <span class="ml-2 text-sm bg-indigo-100 text-indigo-800 rounded-full px-2 py-1">{{len .SenateReview}}</span>
+        </h2>
+        <div class="space-y-3">
+            {{range .SenateReview}}
+            <div class="act-card bg-gradient-to-r from-indigo-50 to-indigo-100 p-3 rounded-lg shadow-sm border-l-4 border-indigo-500 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    {{if .SenateVotes}}<p class="text-xs text-gray-600">Głosowań Senatu: {{len .SenateVotes}}</p>{{end}}
+                    {{if .DaysInStage}}<p class="text-xs text-indigo-600">{{.DaysInStage}} dni w etapie</p>{{end}}
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-indigo-200 text-indigo-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-indigo-600 font-medium">{{.CurrentStage}}</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-indigo-600 hover:text-indigo-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- Presidential Review Column -->
+    <div class="board-column bg-white p-4 rounded-lg shadow min-w-64">
+        <h2 class="text-lg font-semibold mb-4 text-red-600 flex items-center">
+            <span class="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
+            Rozpatrywanie przez Prezydenta
+            <span class="ml-2 text-sm bg-red-100 text-red-800 rounded-full px-2 py-1">{{len .PresidentialReview}}</span>
+        </h2>
+        <div class="space-y-3">
+            {{range .PresidentialReview}}
+            <div class="act-card bg-gradient-to-r from-red-50 to-red-100 p-3 rounded-lg shadow-sm border-l-4 border-red-500 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    {{if .DaysInStage}}<p class="text-xs text-red-600">{{.DaysInStage}} dni w etapie</p>{{end}}
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-red-200 text-red-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-red-600 font-medium">{{.CurrentStage}}</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-red-600 hover:text-red-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- Published & In Force Column -->
+    <div class="board-column bg-white p-4 rounded-lg shadow min-w-64">
+        <h2 class="text-lg font-semibold mb-4 text-green-600 flex items-center">
+            <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+            Opublikowane i Obowiązujące
+            <span class="ml-2 text-sm bg-green-100 text-green-800 rounded-full px-2 py-1">{{add (len .Published) (len .InForce)}}</span>
+        </h2>
+        <div class="space-y-3">
+            {{range .Published}}
+            <div class="act-card bg-gradient-to-r from-green-50 to-green-100 p-3 rounded-lg shadow-sm border-l-4 border-green-500 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    <p class="text-xs text-gray-500">{{.Published}}</p>
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-green-200 text-green-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-green-600 font-medium">Opublikowano</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-green-600 hover:text-green-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
+            </div>
+            {{end}}
+            {{range .InForce}}
+            <div class="act-card bg-gradient-to-r from-green-100 to-green-200 p-3 rounded-lg shadow-sm border-l-4 border-green-600 hover:shadow-md transition-shadow">
+                <h3 class="font-medium text-gray-900 text-sm leading-tight">{{.Title}}</h3>
+                <div class="mt-2 space-y-1">
+                    <p class="text-xs text-gray-500">{{.Published}}</p>
+                    {{if .Tags}}<div class="flex flex-wrap gap-1 mt-1">
+                        {{range .Tags}}<span class="text-xs bg-green-200 text-green-800 rounded px-1">{{.}}</span>{{end}}
+                    </div>{{end}}
+                </div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-green-700 font-medium">Obowiązuje</span>
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
+                        hx-target="#act-details" hx-swap="innerHTML"
+                        class="text-xs text-green-600 hover:text-green-800 bg-white rounded px-2 py-1">Szczegóły</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
 </div>
 
-<div class="board-column bg-white p-4 rounded-lg shadow">
-    <h2 class="text-lg font-semibold mb-4 text-red-600">Uchylone</h2>
-    <div class="space-y-4">
-        {{range .Uchylone}}
-        <div class="act-card bg-white p-4 rounded-lg shadow status-uchylony">
-            <h3 class="font-medium text-gray-900">{{.Title}}</h3>
-            <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
-            <div class="mt-2 flex justify-between items-center">
-                <span class="text-xs text-red-600 font-medium">{{.Status}}</span>
-                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
-                    hx-target="#act-details" hx-swap="innerHTML"
-                    class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
-            </div>
-        </div>
-        {{end}}
-    </div>
-</div>
-
-<div class="board-column bg-white p-4 rounded-lg shadow">
-    <h2 class="text-lg font-semibold mb-4 text-green-600">Obowiązujące</h2>
-    <div class="space-y-4">
-        {{range .Obowiazujace}}
-        <div class="act-card bg-white p-4 rounded-lg shadow status-obowiazujacy">
-            <h3 class="font-medium text-gray-900">{{.Title}}</h3>
-            <p class="text-sm text-gray-500 mt-1">{{.Published}}</p>
-            <div class="mt-2 flex justify-between items-center">
-                <span class="text-xs text-green-600 font-medium">{{.Status}}</span>
-                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}"
-                    hx-target="#act-details" hx-swap="innerHTML"
-                    class="text-sm text-blue-600 hover:text-blue-800">Szczegóły</a>
-            </div>
-        </div>
-        {{end}}
-    </div>
-</div>
-<div id="act-details" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+<!-- Enhanced Act Details Modal -->
+<div id="act-details" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
     <!-- Act details will be loaded here -->
 </div>
 {{end}}
