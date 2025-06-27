@@ -1,4 +1,4 @@
-.PHONY: check build run test test-unit test-e2e lint clean install-lint install-gotestsum
+.PHONY: check vet build run test test-unit test-e2e lint clean install-lint install-gotestsum
 
 # Binary name
 BINARY_NAME=ustawka
@@ -6,8 +6,12 @@ GOTEST=gotestsum --junitfile unit-tests.xml --
 GOLANGCI_LINT_CMD := golangci-lint
 
 # Check: lint, and unit tests (no Docker)
-check: lint test-unit
+check: vet lint test-unit
 	@echo "Linters, and unit tests completed."
+
+vet:
+	@echo "Vet..."
+	@go vet ./...
 
 # Build the application
 build:

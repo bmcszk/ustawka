@@ -13,9 +13,10 @@ import (
 
 // Handler handles HTTP requests for the application
 type Handler struct {
-	templates     *template.Template
-	actService    *service.ActService
-	searchService *service.SearchService
+	templates         *template.Template
+	actService        *service.ActService
+	searchService     *service.SearchService
+	comparisonService *service.ComparisonService
 }
 
 // NewHandler creates a new Handler instance with dependencies
@@ -23,11 +24,13 @@ func NewHandler(
 	templates *template.Template, 
 	actService *service.ActService, 
 	searchService *service.SearchService,
+	comparisonService *service.ComparisonService,
 ) *Handler {
 	return &Handler{
-		templates:     templates,
-		actService:    actService,
-		searchService: searchService,
+		templates:         templates,
+		actService:        actService,
+		searchService:     searchService,
+		comparisonService: comparisonService,
 	}
 }
 
@@ -235,6 +238,67 @@ func (h *Handler) HandleSearchFacets(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(result.Facets); err != nil {
 		slog.Error("Error encoding facets", "error", err)
 		http.Error(w, "Failed to encode facets", http.StatusInternalServerError)
+		return
+	}
+}
+
+// HandleCompareActs compares two acts and returns detailed differences
+func (h *Handler) HandleCompareActs(w http.ResponseWriter, r *http.Request) {
+	leftID := r.URL.Query().Get("left")
+	rightID := r.URL.Query().Get("right")
+	
+	if leftID == "" || rightID == "" {
+		http.Error(w, "Both 'left' and 'right' act IDs are required", http.StatusBadRequest)
+		return
+	}
+	
+	comparison, err := h.comparisonService.CompareActs(r.Context(), leftID, rightID)
+	if err != nil {
+		slog.Error("Error comparing acts", "error", err, "left", leftID, "right", rightID)
+		http.Error(w, "Failed to compare acts", http.StatusInternalServerError)
+		return
+	}
+	
+	// If the request is from HTMX, render the comparison template
+	if r.Header.Get("HX-Request") == "true" {
+		err := h.templates.ExecuteTemplate(w, "comparison_results", comparison)
+		if err != nil {
+			slog.Error("Error executing comparison template", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+	
+	// Otherwise return JSON
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(comparison); err != nil {
+		slog.Error("Error encoding comparison results", "error", err)
+		http.Error(w, "Failed to encode comparison results", http.StatusInternalServerError)
+		return
+	}
+}
+
+// HandleComparisonSuggestions returns suggested acts for comparison
+func (h *Handler) HandleComparisonSuggestions(w http.ResponseWriter, r *http.Request) {
+	actID := r.URL.Query().Get("act_id")
+	
+	if actID == "" {
+		http.Error(w, "Act ID parameter is required", http.StatusBadRequest)
+		return
+	}
+	
+	suggestions, err := h.comparisonService.GetComparisonSuggestions(r.Context(), actID)
+	if err != nil {
+		slog.Error("Error getting comparison suggestions", "error", err, "act_id", actID)
+		http.Error(w, "Failed to get suggestions", http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(suggestions); err != nil {
+		slog.Error("Error encoding suggestions", "error", err)
+		http.Error(w, "Failed to encode suggestions", http.StatusInternalServerError)
 		return
 	}
 }

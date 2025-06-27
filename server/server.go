@@ -28,61 +28,96 @@ type Server struct {
 
 // NewServer creates a new server instance with all dependencies
 func NewServer() (*Server, error) {
-	// Load templates with custom functions
+	templates, err := loadTemplates()
+	if err != nil {
+		return nil, err
+	}
+
+	database, err := initializeDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	services, err := createServices(database)
+	if err != nil {
+		return nil, err
+	}
+
+	handler := handlers.NewHandler(templates, services.ActService, services.SearchService, services.ComparisonService)
+	router := createRouter(handler, services.BackgroundService)
+
+	return &Server{
+		router:            router,
+		handler:           handler,
+		backgroundService: services.BackgroundService,
+	}, nil
+}
+
+type Services struct {
+	ActService        *service.ActService
+	SearchService     *service.SearchService
+	ComparisonService *service.ComparisonService
+	BackgroundService *service.BackgroundService
+}
+
+func loadTemplates() (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
 		},
 	}
 	
-	templates := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+	return template.New("").Funcs(funcMap).ParseFiles(
 		"templates/base.html",
 		"templates/board.html",
 		"templates/act_details.html",
 		"templates/search_results.html",
-	))
+		"templates/comparison_results.html",
+	)
+}
 
-	// Create SEJM client
-	sejmClient := sejm.NewClient()
-
-	// Initialize database
+func initializeDatabase() (service.Database, error) {
 	dbPath := os.Getenv("SEJM_DB_PATH")
 	if dbPath == "" {
 		dbPath = "sejm.db"
 	}
-	database, err := db.New(dbPath)
-	if err != nil {
-		return nil, err
-	}
+	return db.New(dbPath)
+}
 
-	// Create service layer with the concrete client and database
-	actService := service.NewActService(sejmClient, database)
-	
-	// Create search service
-	searchService := service.NewSearchService(database)
-
-	// Create Senate client for enhanced features
+func createServices(database service.Database) (*Services, error) {
+	sejmClient := sejm.NewClient()
 	senateClient := sejm.NewSimpleSenateClient()
 
-	// Create enrichment service
-	enrichmentService := service.NewEnrichmentService(sejmClient, senateClient)
+	actService := service.NewActService(sejmClient, database)
+	searchService := service.NewSearchService(database)
+	comparisonService := service.NewComparisonService(database)
 
-	// Create data pipeline
+	enrichmentService := service.NewEnrichmentService(sejmClient, senateClient)
 	pipelineConfig := service.DefaultPipelineConfig()
 	pipeline := service.NewPipeline(sejmClient, senateClient, database, pipelineConfig)
 
-	// Create background service
 	backgroundConfig := service.DefaultBackgroundConfig()
 	backgroundService := service.NewBackgroundService(
 		pipeline, enrichmentService, database, sejmClient, backgroundConfig)
 
-	// Create handler
-	handler := handlers.NewHandler(templates, actService, searchService)
+	return &Services{
+		ActService:        actService,
+		SearchService:     searchService,
+		ComparisonService: comparisonService,
+		BackgroundService: backgroundService,
+	}, nil
+}
 
-	// Create router
+func createRouter(handler *handlers.Handler, backgroundService *service.BackgroundService) *chi.Mux {
 	r := chi.NewRouter()
+	setupMiddleware(r)
+	setupStaticFiles(r)
+	setupRoutes(r, handler)
+	setupBackgroundRoutes(r, backgroundService)
+	return r
+}
 
-	// Middleware
+func setupMiddleware(r *chi.Mux) {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
@@ -93,12 +128,14 @@ func NewServer() (*Server, error) {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+}
 
-	// Serve static files
+func setupStaticFiles(r *chi.Mux) {
 	fileServer := http.FileServer(http.Dir("static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+}
 
-	// Routes
+func setupRoutes(r *chi.Mux, handler *handlers.Handler) {
 	r.Get("/", handler.Home)
 	r.Get("/api/years", handler.HandleYears)
 	r.Get("/api/acts/DU/{year}", handler.HandleActs)
@@ -106,12 +143,15 @@ func NewServer() (*Server, error) {
 	r.Get("/acts/DU/{year}/{position}", handler.ViewActDetails)
 	r.Get("/metrics", handlers.MetricsHandler)
 
-	// Search routes
 	r.Get("/api/search", handler.HandleSearch)
 	r.Get("/api/search/suggestions", handler.HandleSearchSuggestions)
 	r.Get("/api/search/facets", handler.HandleSearchFacets)
 
-	// Background service management routes
+	r.Get("/api/compare", handler.HandleCompareActs)
+	r.Get("/api/compare/suggestions", handler.HandleComparisonSuggestions)
+}
+
+func setupBackgroundRoutes(r *chi.Mux, backgroundService *service.BackgroundService) {
 	r.Get("/api/background/status", func(w http.ResponseWriter, _ *http.Request) {
 		status := backgroundService.GetStatus()
 		w.Header().Set("Content-Type", "application/json")
@@ -138,7 +178,6 @@ func NewServer() (*Server, error) {
 		_, _ = w.Write([]byte(`{"message": "Enrichment triggered successfully"}`))
 	})
 
-	// Monitoring endpoints
 	r.Get("/api/monitoring/stats", func(w http.ResponseWriter, _ *http.Request) {
 		stats := backgroundService.GetMonitoringStats()
 		if err := handlers.WriteJSON(w, stats); err != nil {
@@ -152,12 +191,6 @@ func NewServer() (*Server, error) {
 			http.Error(w, "Failed to encode validation stats", http.StatusInternalServerError)
 		}
 	})
-
-	return &Server{
-		router:            r,
-		handler:           handler,
-		backgroundService: backgroundService,
-	}, nil
 }
 
 // Start starts the HTTP server and background services on the specified port
