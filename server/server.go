@@ -39,6 +39,7 @@ func NewServer() (*Server, error) {
 		"templates/base.html",
 		"templates/board.html",
 		"templates/act_details.html",
+		"templates/search_results.html",
 	))
 
 	// Create SEJM client
@@ -56,6 +57,9 @@ func NewServer() (*Server, error) {
 
 	// Create service layer with the concrete client and database
 	actService := service.NewActService(sejmClient, database)
+	
+	// Create search service
+	searchService := service.NewSearchService(database)
 
 	// Create Senate client for enhanced features
 	senateClient := sejm.NewSimpleSenateClient()
@@ -73,7 +77,7 @@ func NewServer() (*Server, error) {
 		pipeline, enrichmentService, database, sejmClient, backgroundConfig)
 
 	// Create handler
-	handler := handlers.NewHandler(templates, actService)
+	handler := handlers.NewHandler(templates, actService, searchService)
 
 	// Create router
 	r := chi.NewRouter()
@@ -101,6 +105,11 @@ func NewServer() (*Server, error) {
 	r.Get("/api/acts/DU/{year}/{position}", handler.HandleActDetails)
 	r.Get("/acts/DU/{year}/{position}", handler.ViewActDetails)
 	r.Get("/metrics", handlers.MetricsHandler)
+
+	// Search routes
+	r.Get("/api/search", handler.HandleSearch)
+	r.Get("/api/search/suggestions", handler.HandleSearchSuggestions)
+	r.Get("/api/search/facets", handler.HandleSearchFacets)
 
 	// Background service management routes
 	r.Get("/api/background/status", func(w http.ResponseWriter, _ *http.Request) {

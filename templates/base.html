@@ -123,17 +123,335 @@
         </div>
     </nav>
 
+    <!-- Search Interface -->
+    {{if not .Title}}
+    <div class="bg-gray-50 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="search-interface">
+                <!-- Search Toggle Button -->
+                <div class="flex justify-center mb-4">
+                    <button id="toggleSearch" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                        🔍 Zaawansowane wyszukiwanie
+                    </button>
+                </div>
+                
+                <!-- Advanced Search Panel (initially hidden) -->
+                <div id="searchPanel" class="hidden bg-white rounded-lg shadow-lg p-6 mb-4">
+                    <form id="searchForm" class="space-y-4">
+                        <!-- Text Search -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Wyszukaj w treści</label>
+                                <input type="text" name="q" placeholder="Wpisz słowa kluczowe..." 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tytuł ustawy</label>
+                                <input type="text" name="title" placeholder="Szukaj w tytule..." 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Inicjator</label>
+                                <input type="text" name="initiator" placeholder="Rząd, Sejm..." 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                        </div>
+
+                        <!-- Filters Row 1 -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <select name="status" multiple size="3" 
+                                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                                    <option value="obowiązujący">Obowiązujący</option>
+                                    <option value="pending">W trakcie</option>
+                                    <option value="uchylony">Uchylony</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Rok od</label>
+                                <input type="number" name="year_from" min="1989" max="2030" placeholder="2023" 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Rok do</label>
+                                <input type="number" name="year_to" min="1989" max="2030" placeholder="2024" 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Głosowania</label>
+                                <select name="voting_result" 
+                                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                                    <option value="">Wszystkie</option>
+                                    <option value="passed">Przegłosowane</option>
+                                    <option value="failed">Odrzucone</option>
+                                    <option value="pending">Bez głosowania</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Filters Row 2 -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Dni w etapie (min)</label>
+                                <input type="number" name="days_min" min="0" placeholder="0" 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Dni w etapie (max)</label>
+                                <input type="number" name="days_max" min="0" placeholder="365" 
+                                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Sortowanie</label>
+                                <select name="sort" 
+                                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                                    <option value="date">Data</option>
+                                    <option value="title">Tytuł</option>
+                                    <option value="days_in_stage">Dni w etapie</option>
+                                    <option value="position">Pozycja</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Kolejność</label>
+                                <select name="order" 
+                                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200">
+                                    <option value="desc">Malejąco</option>
+                                    <option value="asc">Rosnąco</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Search Actions -->
+                        <div class="flex justify-between items-center pt-4 border-t border-gray-200">
+                            <div class="flex space-x-2">
+                                <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                                    🔍 Wyszukaj
+                                </button>
+                                <button type="button" id="clearSearch" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                                    Wyczyść
+                                </button>
+                            </div>
+                            <div class="flex items-center space-x-2 text-sm text-gray-600">
+                                <label>Wyników na stronie:</label>
+                                <select name="limit" class="rounded border-gray-300">
+                                    <option value="25">25</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Quick Search Bar -->
+                <div class="quick-search max-w-2xl mx-auto">
+                    <div class="relative">
+                        <input type="text" id="quickSearch" placeholder="Szybkie wyszukiwanie aktów prawnych..." 
+                               class="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div class="container mx-auto px-4 py-8">
             {{if .Title}}
             {{template "act_details" .}}
             {{else}}
-                <div id="board-container" class="w-full">
-                    <!-- Enhanced 6-column board will be loaded here -->
+                <!-- Content Container - shows either board or search results -->
+                <div id="content-container" class="w-full">
+                    <!-- Search Results Container (initially hidden) -->
+                    <div id="search-results" class="hidden"></div>
+                    
+                    <!-- Board Container (default view) -->
+                    <div id="board-container" class="w-full">
+                        <!-- Enhanced 6-column board will be loaded here -->
+                    </div>
                 </div>
             {{end}}
         </div>
     </main>
+
+    <!-- Search Functionality JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Search interface elements
+            const toggleSearch = document.getElementById('toggleSearch');
+            const searchPanel = document.getElementById('searchPanel');
+            const searchForm = document.getElementById('searchForm');
+            const clearSearch = document.getElementById('clearSearch');
+            const quickSearch = document.getElementById('quickSearch');
+            const searchResults = document.getElementById('search-results');
+            const boardContainer = document.getElementById('board-container');
+
+            // Toggle advanced search panel
+            if (toggleSearch) {
+                toggleSearch.addEventListener('click', function() {
+                    searchPanel.classList.toggle('hidden');
+                    const isVisible = !searchPanel.classList.contains('hidden');
+                    this.textContent = isVisible ? '✖️ Ukryj wyszukiwanie' : '🔍 Zaawansowane wyszukiwanie';
+                });
+            }
+
+            // Advanced search form submission
+            if (searchForm) {
+                searchForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    performAdvancedSearch();
+                });
+            }
+
+            // Clear search functionality
+            if (clearSearch) {
+                clearSearch.addEventListener('click', function() {
+                    searchForm.reset();
+                    showBoard();
+                });
+            }
+
+            // Quick search functionality with debounce
+            let quickSearchTimeout;
+            if (quickSearch) {
+                quickSearch.addEventListener('input', function() {
+                    clearTimeout(quickSearchTimeout);
+                    const query = this.value.trim();
+                    
+                    if (query.length >= 3) {
+                        quickSearchTimeout = setTimeout(() => {
+                            performQuickSearch(query);
+                        }, 500); // 500ms debounce
+                    } else if (query.length === 0) {
+                        showBoard();
+                    }
+                });
+
+                quickSearch.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const query = this.value.trim();
+                        if (query.length > 0) {
+                            performQuickSearch(query);
+                        }
+                    }
+                });
+            }
+
+            // Perform advanced search
+            function performAdvancedSearch() {
+                const formData = new FormData(searchForm);
+                const params = new URLSearchParams();
+
+                // Add all form parameters to search
+                for (let [key, value] of formData.entries()) {
+                    if (value.trim() !== '') {
+                        params.append(key, value);
+                    }
+                }
+
+                executeSearch(params.toString());
+            }
+
+            // Perform quick search
+            function performQuickSearch(query) {
+                const params = new URLSearchParams();
+                params.set('q', query);
+                params.set('limit', '50');
+                
+                executeSearch(params.toString());
+            }
+
+            // Execute search request
+            function executeSearch(queryString) {
+                const searchUrl = '/api/search?' + queryString;
+                
+                // Show loading state
+                searchResults.innerHTML = '<div class="text-center py-12"><div class="text-gray-400 text-4xl mb-4">⏳</div><p class="text-gray-600">Wyszukiwanie...</p></div>';
+                showSearchResults();
+
+                // Perform search
+                htmx.ajax('GET', searchUrl, {
+                    target: '#search-results',
+                    swap: 'innerHTML',
+                    headers: { 'HX-Request': 'true' }
+                }).then(() => {
+                    // Search completed successfully
+                }).catch((error) => {
+                    console.error('Search error:', error);
+                    searchResults.innerHTML = '<div class="text-center py-12"><div class="text-red-400 text-4xl mb-4">❌</div><p class="text-red-600">Błąd wyszukiwania. Spróbuj ponownie.</p></div>';
+                });
+            }
+
+            // Show search results and hide board
+            function showSearchResults() {
+                searchResults.classList.remove('hidden');
+                boardContainer.classList.add('hidden');
+            }
+
+            // Show board and hide search results
+            function showBoard() {
+                searchResults.classList.add('hidden');
+                boardContainer.classList.remove('hidden');
+                
+                // Clear quick search
+                if (quickSearch) {
+                    quickSearch.value = '';
+                }
+            }
+
+            // Global functions for pagination and sorting (called from search results)
+            window.loadSearchPage = function(page) {
+                const currentParams = new URLSearchParams(window.location.search);
+                currentParams.set('offset', (page - 1) * 50);
+                executeSearch(currentParams.toString());
+            };
+
+            window.getCurrentPage = function() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const offset = parseInt(urlParams.get('offset') || '0');
+                return Math.floor(offset / 50) + 1;
+            };
+
+            // Search suggestions (for future enhancement)
+            function setupSearchSuggestions() {
+                // TODO: Implement auto-complete suggestions
+                // This would use the /api/search/suggestions endpoint
+            }
+
+            // Initialize search suggestions if needed
+            setupSearchSuggestions();
+        });
+
+        // Additional utility functions for search
+        function toggleFilterSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.classList.toggle('hidden');
+            }
+        }
+
+        function resetSearch() {
+            // Reset all search forms and show default board view
+            const searchForm = document.getElementById('searchForm');
+            const quickSearch = document.getElementById('quickSearch');
+            
+            if (searchForm) searchForm.reset();
+            if (quickSearch) quickSearch.value = '';
+            
+            const searchResults = document.getElementById('search-results');
+            const boardContainer = document.getElementById('board-container');
+            
+            if (searchResults) searchResults.classList.add('hidden');
+            if (boardContainer) boardContainer.classList.remove('hidden');
+        }
+    </script>
 </body>
 
 </html>

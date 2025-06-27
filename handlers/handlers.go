@@ -13,15 +13,17 @@ import (
 
 // Handler handles HTTP requests for the application
 type Handler struct {
-	templates  *template.Template
-	actService *service.ActService
+	templates     *template.Template
+	actService    *service.ActService
+	searchService *service.SearchService
 }
 
 // NewHandler creates a new Handler instance with dependencies
-func NewHandler(templates *template.Template, actService *service.ActService) *Handler {
+func NewHandler(templates *template.Template, actService *service.ActService, searchService *service.SearchService) *Handler {
 	return &Handler{
-		templates:  templates,
-		actService: actService,
+		templates:     templates,
+		actService:    actService,
+		searchService: searchService,
 	}
 }
 
@@ -149,6 +151,86 @@ func (h *Handler) ViewActDetails(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("Error executing template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// HandleSearch performs advanced search with filtering
+func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
+	// Parse search criteria from query parameters
+	criteria := service.ParseSearchCriteria(r.URL.Query())
+	
+	// Perform search
+	result, err := h.searchService.SearchActs(r.Context(), criteria)
+	if err != nil {
+		slog.Error("Error performing search", "error", err)
+		http.Error(w, "Search failed", http.StatusInternalServerError)
+		return
+	}
+	
+	// If the request is from HTMX, render the search results template
+	if r.Header.Get("HX-Request") == "true" {
+		err := h.templates.ExecuteTemplate(w, "search_results", result)
+		if err != nil {
+			slog.Error("Error executing search results template", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+	
+	// Otherwise return JSON
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		slog.Error("Error encoding search results", "error", err)
+		http.Error(w, "Failed to encode search results", http.StatusInternalServerError)
+		return
+	}
+}
+
+// HandleSearchSuggestions provides auto-complete suggestions
+func (h *Handler) HandleSearchSuggestions(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	field := r.URL.Query().Get("field")
+	
+	if query == "" || field == "" {
+		http.Error(w, "Query and field parameters are required", http.StatusBadRequest)
+		return
+	}
+	
+	suggestions, err := h.searchService.GetSearchSuggestions(r.Context(), query, field)
+	if err != nil {
+		slog.Error("Error getting search suggestions", "error", err)
+		http.Error(w, "Failed to get suggestions", http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(suggestions); err != nil {
+		slog.Error("Error encoding suggestions", "error", err)
+		http.Error(w, "Failed to encode suggestions", http.StatusInternalServerError)
+		return
+	}
+}
+
+// HandleSearchFacets returns available filter options
+func (h *Handler) HandleSearchFacets(w http.ResponseWriter, r *http.Request) {
+	// Get a basic search with no filters to generate facets
+	criteria := &service.SearchCriteria{
+		Limit: 0, // Don't return actual results, just facets
+	}
+	
+	result, err := h.searchService.SearchActs(r.Context(), criteria)
+	if err != nil {
+		slog.Error("Error getting search facets", "error", err)
+		http.Error(w, "Failed to get facets", http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result.Facets); err != nil {
+		slog.Error("Error encoding facets", "error", err)
+		http.Error(w, "Failed to encode facets", http.StatusInternalServerError)
 		return
 	}
 }
