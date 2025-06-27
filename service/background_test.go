@@ -112,6 +112,11 @@ func TestBackgroundServiceStart(t *testing.T) {
 				// Add mock for monitoring service initialization
 				md.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
 					Return([]sejm.EnhancedAct{}, nil).Maybe()
+				// Add mock for background sync operations
+				md.On("GetCacheAge", mock.Anything, mock.AnythingOfType("int")).
+					Return(time.Hour, nil).Maybe()
+				md.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+					Return([]sejm.Act{}, nil).Maybe()
 				// Add mock for Stop method
 				mp.On("Stop").Return().Maybe()
 			},
