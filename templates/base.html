@@ -257,6 +257,22 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Export Actions -->
+            <div class="flex justify-end space-x-2 mt-4">
+                <button id="exportJSON" onclick="exportCurrentView('json')" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
+                    📄 Eksportuj JSON
+                </button>
+                <button id="exportCSV" onclick="exportCurrentView('csv')" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
+                    📊 Eksportuj CSV
+                </button>
+                <button id="exportPDF" onclick="exportCurrentView('pdf')" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm">
+                    📑 Eksportuj PDF
+                </button>
+            </div>
         </div>
     </div>
     {{end}}
@@ -450,6 +466,55 @@
             
             if (searchResults) searchResults.classList.add('hidden');
             if (boardContainer) boardContainer.classList.remove('hidden');
+        }
+        
+        // Export functionality
+        function exportCurrentView(format) {
+            const params = new URLSearchParams();
+            params.set('format', format);
+            
+            // Get current year from year selector
+            const yearSelect = document.getElementById('yearSelect');
+            if (yearSelect && yearSelect.value) {
+                params.set('year', yearSelect.value);
+            }
+            
+            // Check if we're currently showing search results
+            const searchResults = document.getElementById('search-results');
+            const isSearchMode = searchResults && !searchResults.classList.contains('hidden');
+            
+            if (isSearchMode) {
+                // Export search results - get current search parameters
+                const searchForm = document.getElementById('searchForm');
+                const quickSearch = document.getElementById('quickSearch');
+                
+                if (quickSearch && quickSearch.value) {
+                    params.set('title', quickSearch.value);
+                }
+                
+                if (searchForm) {
+                    const formData = new FormData(searchForm);
+                    for (const [key, value] of formData.entries()) {
+                        if (value) {
+                            if (params.has(key)) {
+                                // Handle multiple values (like status[])
+                                const existing = params.get(key);
+                                params.set(key, existing + ',' + value);
+                            } else {
+                                params.set(key, value);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Add additional export options
+            params.set('include_voting', 'true');
+            params.set('include_stages', 'true');
+            
+            // Generate export URL and trigger download
+            const exportUrl = `/api/export/acts?${params.toString()}`;
+            window.open(exportUrl, '_blank');
         }
     </script>
 </body>

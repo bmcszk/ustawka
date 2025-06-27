@@ -44,7 +44,13 @@ func NewServer() (*Server, error) {
 		return nil, err
 	}
 
-	handler := handlers.NewHandler(templates, services.ActService, services.SearchService, services.ComparisonService)
+	handler := handlers.NewHandler(
+		templates, 
+		services.ActService, 
+		services.SearchService, 
+		services.ComparisonService, 
+		services.ExportService,
+	)
 	router := createRouter(handler, services.BackgroundService)
 
 	return &Server{
@@ -59,6 +65,7 @@ type Services struct {
 	ActService        *service.ActService
 	SearchService     *service.SearchService
 	ComparisonService *service.ComparisonService
+	ExportService     *service.ExportService
 	BackgroundService *service.BackgroundService
 }
 
@@ -93,6 +100,7 @@ func createServices(database service.Database) (*Services, error) {
 	actService := service.NewActService(sejmClient, database)
 	searchService := service.NewSearchService(database)
 	comparisonService := service.NewComparisonService(database)
+	exportService := service.NewExportService(database)
 
 	enrichmentService := service.NewEnrichmentService(sejmClient, senateClient)
 	pipelineConfig := service.DefaultPipelineConfig()
@@ -112,6 +120,7 @@ func createServices(database service.Database) (*Services, error) {
 		ActService:        actService,
 		SearchService:     searchService,
 		ComparisonService: comparisonService,
+		ExportService:     exportService,
 		BackgroundService: backgroundService,
 	}, nil
 }
@@ -157,6 +166,9 @@ func setupRoutes(r *chi.Mux, handler *handlers.Handler) {
 
 	r.Get("/api/compare", handler.HandleCompareActs)
 	r.Get("/api/compare/suggestions", handler.HandleComparisonSuggestions)
+
+	r.Get("/api/export/acts", handler.HandleExportActs)
+	r.Get("/api/export/comparison", handler.HandleExportComparison)
 }
 
 func setupBackgroundRoutes(r *chi.Mux, backgroundService *service.BackgroundService) {

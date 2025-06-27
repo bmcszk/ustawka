@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 	"ustawka/service"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +19,7 @@ type Handler struct {
 	actService        *service.ActService
 	searchService     *service.SearchService
 	comparisonService *service.ComparisonService
+	exportService     *service.ExportService
 }
 
 // NewHandler creates a new Handler instance with dependencies
@@ -25,12 +28,14 @@ func NewHandler(
 	actService *service.ActService, 
 	searchService *service.SearchService,
 	comparisonService *service.ComparisonService,
+	exportService *service.ExportService,
 ) *Handler {
 	return &Handler{
 		templates:         templates,
 		actService:        actService,
 		searchService:     searchService,
 		comparisonService: comparisonService,
+		exportService:     exportService,
 	}
 }
 
@@ -299,6 +304,131 @@ func (h *Handler) HandleComparisonSuggestions(w http.ResponseWriter, r *http.Req
 	if err := json.NewEncoder(w).Encode(suggestions); err != nil {
 		slog.Error("Error encoding suggestions", "error", err)
 		http.Error(w, "Failed to encode suggestions", http.StatusInternalServerError)
+		return
+	}
+}
+
+// HandleExportActs exports acts data in various formats
+func (h *Handler) HandleExportActs(w http.ResponseWriter, r *http.Request) {
+	req := h.parseExportRequest(r)
+	
+	result, err := h.exportService.ExportActs(r.Context(), req)
+	if err != nil {
+		slog.Error("Error exporting acts", "error", err, "format", req.Format)
+		http.Error(w, "Failed to export acts", http.StatusInternalServerError)
+		return
+	}
+	
+	h.writeExportResponse(w, result)
+}
+
+func (h *Handler) parseExportRequest(r *http.Request) *service.ExportRequest {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "json"
+	}
+	
+	req := &service.ExportRequest{
+		Format:        service.ExportFormat(format),
+		IncludeVoting: r.URL.Query().Get("include_voting") == "true",
+		IncludeStages: r.URL.Query().Get("include_stages") == "true",
+	}
+	
+	h.parseOptionalParameters(r, req)
+	return req
+}
+
+func (h *Handler) parseOptionalParameters(r *http.Request, req *service.ExportRequest) {
+	h.parseYearParameter(r, req)
+	h.parseStatusParameter(r, req)
+	h.parseTitleParameter(r, req)
+	h.parseDateParameters(r, req)
+}
+
+func (*Handler) parseYearParameter(r *http.Request, req *service.ExportRequest) {
+	if yearStr := r.URL.Query().Get("year"); yearStr != "" {
+		if year, err := strconv.Atoi(yearStr); err == nil {
+			req.Year = &year
+		}
+	}
+}
+
+func (*Handler) parseStatusParameter(r *http.Request, req *service.ExportRequest) {
+	if statuses := r.URL.Query()["status"]; len(statuses) > 0 {
+		req.Status = statuses
+	}
+}
+
+func (*Handler) parseTitleParameter(r *http.Request, req *service.ExportRequest) {
+	if title := r.URL.Query().Get("title"); title != "" {
+		req.Title = title
+	}
+}
+
+func (*Handler) parseDateParameters(r *http.Request, req *service.ExportRequest) {
+	if dateFromStr := r.URL.Query().Get("date_from"); dateFromStr != "" {
+		if dateFrom, err := time.Parse("2006-01-02", dateFromStr); err == nil {
+			req.DateFrom = &dateFrom
+		}
+	}
+	
+	if dateToStr := r.URL.Query().Get("date_to"); dateToStr != "" {
+		if dateTo, err := time.Parse("2006-01-02", dateToStr); err == nil {
+			req.DateTo = &dateTo
+		}
+	}
+}
+
+func (*Handler) writeExportResponse(w http.ResponseWriter, result *service.ExportResult) {
+	w.Header().Set("Content-Type", result.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", result.Filename))
+	w.Header().Set("Content-Length", strconv.Itoa(result.Size))
+	
+	if _, err := w.Write(result.Data); err != nil {
+		slog.Error("Error writing export data", "error", err)
+	}
+}
+
+// HandleExportComparison exports comparison results in various formats
+func (h *Handler) HandleExportComparison(w http.ResponseWriter, r *http.Request) {
+	// Get comparison parameters
+	leftID := r.URL.Query().Get("left")
+	rightID := r.URL.Query().Get("right")
+	format := r.URL.Query().Get("format")
+	
+	if leftID == "" || rightID == "" {
+		http.Error(w, "Both 'left' and 'right' act IDs are required", http.StatusBadRequest)
+		return
+	}
+	
+	if format == "" {
+		format = "json" // Default format
+	}
+	
+	// Get comparison data
+	comparison, err := h.comparisonService.CompareActs(r.Context(), leftID, rightID)
+	if err != nil {
+		slog.Error("Error getting comparison for export", "error", err, "left", leftID, "right", rightID)
+		http.Error(w, "Failed to get comparison data", http.StatusInternalServerError)
+		return
+	}
+	
+	// Export comparison
+	result, err := h.exportService.ExportComparison(r.Context(), comparison, service.ExportFormat(format))
+	if err != nil {
+		slog.Error("Error exporting comparison", "error", err, "format", format)
+		http.Error(w, "Failed to export comparison", http.StatusInternalServerError)
+		return
+	}
+	
+	// Set response headers
+	w.Header().Set("Content-Type", result.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", result.Filename))
+	w.Header().Set("Content-Length", strconv.Itoa(result.Size))
+	
+	// Write data
+	if _, err := w.Write(result.Data); err != nil {
+		slog.Error("Error writing export data", "error", err)
 		return
 	}
 }

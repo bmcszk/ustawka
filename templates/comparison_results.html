@@ -143,8 +143,12 @@
                         class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
                     Eksportuj JSON
                 </button>
-                <button onclick="exportComparison('pdf')" 
+                <button onclick="exportComparison('csv')" 
                         class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm">
+                    Eksportuj CSV
+                </button>
+                <button onclick="exportComparison('pdf')" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm">
                     Eksportuj PDF
                 </button>
                 <button onclick="shareComparison()" 
@@ -158,8 +162,9 @@
 
 <script>
 function exportComparison(format) {
-    const comparisonId = '{{.ComparisonID}}';
-    const url = `/api/compare/export?comparison_id=${comparisonId}&format=${format}`;
+    const leftId = '{{.LeftAct.ID}}';
+    const rightId = '{{.RightAct.ID}}';
+    const url = `/api/export/comparison?left=${encodeURIComponent(leftId)}&right=${encodeURIComponent(rightId)}&format=${format}`;
     window.open(url, '_blank');
 }
 
