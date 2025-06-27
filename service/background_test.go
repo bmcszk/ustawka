@@ -117,6 +117,10 @@ func TestBackgroundServiceStart(t *testing.T) {
 					Return(time.Hour, nil).Maybe()
 				md.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
 					Return([]sejm.Act{}, nil).Maybe()
+				md.On("StoreActs", mock.Anything, mock.AnythingOfType("int"), mock.Anything).
+					Return(nil).Maybe()
+				md.On("StoreEnhancedAct", mock.Anything, mock.Anything).
+					Return(nil).Maybe()
 				// Add mock for Stop method
 				mp.On("Stop").Return().Maybe()
 			},
@@ -156,6 +160,8 @@ func TestBackgroundServiceStart(t *testing.T) {
 			config.EnablePerformanceMetrics = false
 
 			mockSejmClient := &MockSejmClient{}
+			mockSejmClient.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+				Return([]sejm.Act{}, nil).Maybe()
 	bs := service.NewBackgroundService(pipeline, enrichment, db, mockSejmClient, config)
 
 			// For "already running" test, start service first

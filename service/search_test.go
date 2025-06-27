@@ -54,10 +54,7 @@ func TestSearchActs_BasicQuery(t *testing.T) {
 		},
 	}
 	
-	db.On("GetEnhancedActs", mock.Anything, 2024).Return(mockActs, nil)
-	db.On("GetEnhancedActs", mock.Anything, 2025).Return([]sejm.EnhancedAct{}, nil)
-	db.On("GetEnhancedActs", mock.Anything, 2023).Return([]sejm.EnhancedAct{}, nil)
-	db.On("GetEnhancedActs", mock.Anything, 2022).Return([]sejm.EnhancedAct{}, nil)
+	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).Return(mockActs, nil)
 	
 	criteria := &service.SearchCriteria{
 		Query: "healthcare",

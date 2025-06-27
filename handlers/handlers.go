@@ -19,7 +19,11 @@ type Handler struct {
 }
 
 // NewHandler creates a new Handler instance with dependencies
-func NewHandler(templates *template.Template, actService *service.ActService, searchService *service.SearchService) *Handler {
+func NewHandler(
+	templates *template.Template, 
+	actService *service.ActService, 
+	searchService *service.SearchService,
+) *Handler {
 	return &Handler{
 		templates:     templates,
 		actService:    actService,
