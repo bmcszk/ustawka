@@ -2,6 +2,7 @@
 package sejm
 
 import (
+	"context"
 	"time"
 )
 
@@ -287,4 +288,50 @@ func GenerateActLinks(act *EnhancedAct) ActLinks {
 	}
 	
 	return links
+}
+
+// ActLinkingService handles linking between Sejm and Senate data
+type ActLinkingService struct {
+	sejmClient   *Client
+	senateClient SenateClient
+}
+
+// NewActLinkingService creates a new ActLinkingService
+func NewActLinkingService(sejmClient *Client, senateClient SenateClient) *ActLinkingService {
+	return &ActLinkingService{
+		sejmClient:   sejmClient,
+		senateClient: senateClient,
+	}
+}
+
+// LinkSenateToSejm links Senate voting data to Sejm Acts
+func (als *ActLinkingService) LinkSenateToSejm(_ context.Context, sejmAct *EnhancedAct,
+	senateVotes []SenateVotingRecord) error {
+	// This would implement the logic to match Senate votes to Sejm Acts
+	// For now, we'll use a simple title matching approach
+	
+	for _, vote := range senateVotes {
+		if als.matchActToVote(sejmAct, vote) {
+			// Convert SenateVotingRecord to VotingRecord format
+			votingRecord := VotingRecord{
+				Date:         vote.VotingDate,
+				VoteType:     "senate_review",
+				Result:       vote.Result,
+				YesVotes:     vote.VotesFor,
+				NoVotes:      vote.VotesAgainst,
+				AbstainVotes: vote.VotesAbstain,
+				TotalVoted:   vote.VotesFor + vote.VotesAgainst + vote.VotesAbstain,
+			}
+			
+			sejmAct.SenateVotes = append(sejmAct.SenateVotes, votingRecord)
+		}
+	}
+	
+	return nil
+}
+
+// matchActToVote determines if a Senate vote matches a Sejm Act
+func (*ActLinkingService) matchActToVote(act *EnhancedAct, vote SenateVotingRecord) bool {
+	// Simple title matching - could be enhanced with more sophisticated matching
+	return act.Title == vote.Subject || act.ID == vote.ActID
 }
