@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -53,6 +54,7 @@ func NewServer() (*Server, error) {
 	}, nil
 }
 
+// Services holds all application services
 type Services struct {
 	ActService        *service.ActService
 	SearchService     *service.SearchService
@@ -94,7 +96,13 @@ func createServices(database service.Database) (*Services, error) {
 
 	enrichmentService := service.NewEnrichmentService(sejmClient, senateClient)
 	pipelineConfig := service.DefaultPipelineConfig()
-	pipeline := service.NewPipeline(sejmClient, senateClient, database, pipelineConfig)
+	
+	// Type assertion for pipeline which needs concrete DB type
+	concreteDB, ok := database.(*db.DB)
+	if !ok {
+		return nil, errors.New("database must be *db.DB type for pipeline")
+	}
+	pipeline := service.NewPipeline(sejmClient, senateClient, concreteDB, pipelineConfig)
 
 	backgroundConfig := service.DefaultBackgroundConfig()
 	backgroundService := service.NewBackgroundService(
@@ -152,45 +160,61 @@ func setupRoutes(r *chi.Mux, handler *handlers.Handler) {
 }
 
 func setupBackgroundRoutes(r *chi.Mux, backgroundService *service.BackgroundService) {
-	r.Get("/api/background/status", func(w http.ResponseWriter, _ *http.Request) {
+	r.Get("/api/background/status", createStatusHandler(backgroundService))
+	r.Post("/api/background/sync", createSyncHandler(backgroundService))
+	r.Post("/api/background/enrich", createEnrichHandler(backgroundService))
+	r.Get("/api/monitoring/stats", createMonitoringHandler(backgroundService))
+	r.Get("/api/validation/stats", createValidationHandler(backgroundService))
+}
+
+func createStatusHandler(backgroundService *service.BackgroundService) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		status := backgroundService.GetStatus()
 		w.Header().Set("Content-Type", "application/json")
 		if err := handlers.WriteJSON(w, status); err != nil {
 			http.Error(w, "Failed to encode status", http.StatusInternalServerError)
 		}
-	})
+	}
+}
 
-	r.Post("/api/background/sync", func(w http.ResponseWriter, r *http.Request) {
+func createSyncHandler(backgroundService *service.BackgroundService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if err := backgroundService.TriggerSync(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"message": "Sync triggered successfully"}`))
-	})
+	}
+}
 
-	r.Post("/api/background/enrich", func(w http.ResponseWriter, r *http.Request) {
+func createEnrichHandler(backgroundService *service.BackgroundService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if err := backgroundService.TriggerEnrichment(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"message": "Enrichment triggered successfully"}`))
-	})
+	}
+}
 
-	r.Get("/api/monitoring/stats", func(w http.ResponseWriter, _ *http.Request) {
+func createMonitoringHandler(backgroundService *service.BackgroundService) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		stats := backgroundService.GetMonitoringStats()
 		if err := handlers.WriteJSON(w, stats); err != nil {
 			http.Error(w, "Failed to encode monitoring stats", http.StatusInternalServerError)
 		}
-	})
+	}
+}
 
-	r.Get("/api/validation/stats", func(w http.ResponseWriter, _ *http.Request) {
+func createValidationHandler(backgroundService *service.BackgroundService) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		stats := backgroundService.GetValidationStats()
 		if err := handlers.WriteJSON(w, stats); err != nil {
 			http.Error(w, "Failed to encode validation stats", http.StatusInternalServerError)
 		}
-	})
+	}
 }
 
 // Start starts the HTTP server and background services on the specified port
