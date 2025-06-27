@@ -29,6 +29,7 @@ type Database interface {
 	// Enhanced Act operations
 	GetEnhancedActs(ctx context.Context, year int) ([]sejm.EnhancedAct, error)
 	StoreEnhancedAct(ctx context.Context, act *sejm.EnhancedAct) error
+	GetEnhancedActByID(ctx context.Context, actID string) (*sejm.EnhancedAct, error)
 }
 
 // ActService provides business logic for legislative acts
@@ -293,6 +294,27 @@ func (s *ActService) GetActDetails(ctx context.Context, year, position string) (
 		// Continue even if cache store fails
 	}
 
+	return details, nil
+}
+
+// GetEnhancedActDetails retrieves enhanced details for a specific act
+func (s *ActService) GetEnhancedActDetails(ctx context.Context, year, position string) (any, error) {
+	metrics.IncrementAPI()
+	actID := fmt.Sprintf("DU/%s/%s", year, position)
+
+	// Try to get enhanced act first
+	enhancedAct, err := s.db.GetEnhancedActByID(ctx, actID)
+	if err == nil && enhancedAct != nil {
+		metrics.IncrementCacheHit()
+		return enhancedAct, nil
+	}
+
+	// Fall back to regular act details
+	details, err := s.GetActDetails(ctx, year, position)
+	if err != nil {
+		return nil, err
+	}
+	
 	return details, nil
 }
 

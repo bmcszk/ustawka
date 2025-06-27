@@ -542,6 +542,58 @@ func (*DB) scanProcessStage(rows *sql.Rows) (sejm.ProcessStage, error) {
 	return stage, nil
 }
 
+// GetEnhancedActByID retrieves a single enhanced act by its ID
+func (db *DB) GetEnhancedActByID(ctx context.Context, actID string) (*sejm.EnhancedAct, error) {
+	query := `
+		SELECT 
+			id, title, status, published, position, year, type, address,
+			COALESCE(detailed_status, '') as detailed_status,
+			COALESCE(current_stage, '') as current_stage,
+			COALESCE(stage_date, '') as stage_date,
+			COALESCE(days_in_stage, 0) as days_in_stage,
+			COALESCE(initiator_type, '') as initiator_type,
+			COALESCE(committee_code, '') as committee_code,
+			COALESCE(rapporteur_name, '') as rapporteur_name,
+			COALESCE(urgency_status, '') as urgency_status,
+			COALESCE(eu_compliance, 0) as eu_compliance,
+			COALESCE(process_print_number, '') as process_print_number,
+			COALESCE(rcl_link, '') as rcl_link
+		FROM acts WHERE id = ?
+	`
+
+	row := db.QueryRowContext(ctx, query, actID)
+	
+	var act sejm.EnhancedAct
+	var stageDateStr string
+
+	err := row.Scan(
+		&act.ID, &act.Title, &act.Status, &act.Published, &act.Position,
+		&act.Year, &act.Type, &act.Address, &act.DetailedStatus,
+		&act.CurrentStage, &stageDateStr, &act.DaysInStage,
+		&act.InitiatorType, &act.CommitteeCode, &act.RapporteurName,
+		&act.UrgencyStatus, &act.EUCompliance, &act.ProcessPrintNumber,
+		&act.RCLLink,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Parse stage date
+	if stageDateStr != "" {
+		if stageDate, err := time.Parse("2006-01-02 15:04:05", stageDateStr); err == nil {
+			act.StageDate = stageDate
+		}
+	}
+
+	// Enrich with voting records and process stages
+	db.enrichActWithDetails(ctx, &act)
+	
+	return &act, nil
+}
+
 // GetActVotingHistory returns comprehensive voting history for an act
 func (db *DB) GetActVotingHistory(ctx context.Context, actID string) ([]sejm.VotingRecord, error) {
 	return db.queryVotingHistory(ctx, actID)

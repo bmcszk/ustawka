@@ -102,7 +102,7 @@ func (h *Handler) HandleActDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	details, err := h.actService.GetActDetails(r.Context(), year, position)
+	details, err := h.actService.GetEnhancedActDetails(r.Context(), year, position)
 	if err != nil {
 		slog.Error("Error fetching act details", "error", err)
 		http.Error(w, "Failed to fetch act details", http.StatusInternalServerError)

@@ -113,6 +113,18 @@ func (m *MockDB) StoreEnhancedAct(ctx context.Context, act *sejm.EnhancedAct) er
 	return args.Error(0)
 }
 
+func (m *MockDB) GetEnhancedActByID(ctx context.Context, actID string) (*sejm.EnhancedAct, error) {
+	args := m.Called(ctx, actID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	act, ok := args.Get(0).(*sejm.EnhancedAct)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return act, args.Error(1)
+}
+
 func TestGetAvailableYears(t *testing.T) {
 	tests := getAvailableYearsTestCases()
 
