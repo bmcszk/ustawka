@@ -129,6 +129,14 @@ func NewServer() (*Server, error) {
 		_, _ = w.Write([]byte(`{"message": "Enrichment triggered successfully"}`))
 	})
 
+	// Monitoring endpoints
+	r.Get("/api/monitoring/stats", func(w http.ResponseWriter, _ *http.Request) {
+		stats := backgroundService.GetMonitoringStats()
+		if err := handlers.WriteJSON(w, stats); err != nil {
+			http.Error(w, "Failed to encode monitoring stats", http.StatusInternalServerError)
+		}
+	})
+
 	return &Server{
 		router:            r,
 		handler:           handler,

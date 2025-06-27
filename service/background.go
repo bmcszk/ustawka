@@ -33,6 +33,7 @@ type BackgroundService struct {
 	enrichmentService  EnrichmentInterface
 	db                 Database
 	sejmClient         SejmClient
+	monitoringService  *MonitoringService
 	
 	// Configuration
 	config             *BackgroundConfig
@@ -100,11 +101,19 @@ func NewBackgroundService(
 	sejmClient SejmClient,
 	config *BackgroundConfig,
 ) *BackgroundService {
+	// Create monitoring service with default config
+	monitoringConfig := DefaultMonitoringConfig()
+	monitoringService := NewMonitoringService(database, monitoringConfig)
+	
+	// Add default notification channels
+	monitoringService.AddNotificationChannel(NewLogNotificationChannel("default"))
+	
 	return &BackgroundService{
 		pipeline:          pipeline,
 		enrichmentService: enrichmentService,
 		db:               database,
 		sejmClient:       sejmClient,
+		monitoringService: monitoringService,
 		config:           config,
 		stopChan:         make(chan struct{}),
 	}
@@ -157,6 +166,12 @@ func (bs *BackgroundService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start pipeline: %w", err)
 	}
 	
+	// Start monitoring service
+	if err := bs.monitoringService.Start(ctx); err != nil {
+		slog.Error("Failed to start monitoring service", "error", err)
+		// Continue without monitoring rather than failing completely
+	}
+	
 	// Start background workers
 	bs.wg.Add(1)
 	go bs.syncScheduler(ctx)
@@ -191,6 +206,9 @@ func (bs *BackgroundService) Stop() {
 	
 	// Stop the pipeline first
 	bs.pipeline.Stop()
+	
+	// Stop monitoring service
+	bs.monitoringService.Stop()
 	
 	// Stop background workers
 	close(bs.stopChan)
@@ -569,7 +587,7 @@ func (bs *BackgroundService) GetStatus() *BackgroundStatus {
 		estimatedTime = "~15 minutes"
 	}
 	
-	return &BackgroundStatus{
+	status := &BackgroundStatus{
 		IsRunning:               bs.running,
 		LastFullSync:            bs.lastFullSync,
 		LastEnrichmentRun:       bs.lastEnrichmentRun,
@@ -582,6 +600,8 @@ func (bs *BackgroundService) GetStatus() *BackgroundStatus {
 		NextScheduledSync:       nextSync,
 		EstimatedProcessingTime: estimatedTime,
 	}
+	
+	return status
 }
 
 // TriggerSync manually triggers a full synchronization
@@ -604,4 +624,14 @@ func (bs *BackgroundService) TriggerEnrichment(ctx context.Context) error {
 	slog.Info("Manually triggered enrichment cycle")
 	go bs.runEnrichmentCycle(ctx)
 	return nil
+}
+
+// GetMonitoringStats returns monitoring service statistics
+func (bs *BackgroundService) GetMonitoringStats() map[string]interface{} {
+	return bs.monitoringService.GetStats()
+}
+
+// AddNotificationChannel adds a notification channel to the monitoring service
+func (bs *BackgroundService) AddNotificationChannel(channel NotificationChannel) {
+	bs.monitoringService.AddNotificationChannel(channel)
 }
