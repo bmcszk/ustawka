@@ -152,3 +152,9 @@ func (h *Handler) ViewActDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// WriteJSON writes a JSON response
+func WriteJSON(w http.ResponseWriter, data any) error {
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(data)
+}
