@@ -15,11 +15,13 @@ import (
 	"github.com/go-chi/cors"
 )
 
+// Server represents the HTTP server instance
 type Server struct {
 	router  *chi.Mux
 	handler *handlers.Handler
 }
 
+// NewServer creates a new server instance with all dependencies
 func NewServer() (*Server, error) {
 	// Load templates
 	templates := template.Must(template.ParseFiles(
@@ -68,9 +70,9 @@ func NewServer() (*Server, error) {
 
 	// Routes
 	r.Get("/", handler.Home)
-	r.Get("/api/years", handler.GetYears)
-	r.Get("/api/acts/DU/{year}", handler.GetActs)
-	r.Get("/api/acts/DU/{year}/{position}", handler.GetActDetails)
+	r.Get("/api/years", handler.HandleYears)
+	r.Get("/api/acts/DU/{year}", handler.HandleActs)
+	r.Get("/api/acts/DU/{year}/{position}", handler.HandleActDetails)
 	r.Get("/acts/DU/{year}/{position}", handler.ViewActDetails)
 	r.Get("/metrics", handlers.MetricsHandler)
 
@@ -80,6 +82,7 @@ func NewServer() (*Server, error) {
 	}, nil
 }
 
+// Start starts the HTTP server on the specified port
 func (s *Server) Start(port string) error {
 	slog.Info("Server starting", "port", port)
 	return http.ListenAndServe(":"+port, s.router)

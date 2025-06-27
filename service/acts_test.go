@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 	"ustawka/sejm"
+	"ustawka/service"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,12 +18,19 @@ type MockSejmClient struct {
 	mock.Mock
 }
 
+// Ensure MockSejmClient implements service.SejmClient
+var _ service.SejmClient = (*MockSejmClient)(nil)
+
 func (m *MockSejmClient) GetActs(ctx context.Context, year int) ([]sejm.Act, error) {
 	args := m.Called(ctx, year)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]sejm.Act), args.Error(1)
+	acts, ok := args.Get(0).([]sejm.Act)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return acts, args.Error(1)
 }
 
 func (m *MockSejmClient) GetActDetails(ctx context.Context, actID string) (*sejm.ActDetails, error) {
@@ -30,7 +38,11 @@ func (m *MockSejmClient) GetActDetails(ctx context.Context, actID string) (*sejm
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*sejm.ActDetails), args.Error(1)
+	details, ok := args.Get(0).(*sejm.ActDetails)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return details, args.Error(1)
 }
 
 // MockDB is a mock implementation of the database
@@ -38,12 +50,19 @@ type MockDB struct {
 	mock.Mock
 }
 
+// Ensure MockDB implements service.Database
+var _ service.Database = (*MockDB)(nil)
+
 func (m *MockDB) GetActs(ctx context.Context, year int) ([]sejm.Act, error) {
 	args := m.Called(ctx, year)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]sejm.Act), args.Error(1)
+	acts, ok := args.Get(0).([]sejm.Act)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return acts, args.Error(1)
 }
 
 func (m *MockDB) StoreActs(ctx context.Context, year int, acts []sejm.Act) error {
@@ -56,7 +75,11 @@ func (m *MockDB) GetActDetails(ctx context.Context, actID string) (*sejm.ActDeta
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*sejm.ActDetails), args.Error(1)
+	details, ok := args.Get(0).(*sejm.ActDetails)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return details, args.Error(1)
 }
 
 func (m *MockDB) StoreActDetails(ctx context.Context, details *sejm.ActDetails) error {
@@ -66,11 +89,32 @@ func (m *MockDB) StoreActDetails(ctx context.Context, details *sejm.ActDetails) 
 
 func (m *MockDB) GetCacheAge(ctx context.Context, year int) (time.Duration, error) {
 	args := m.Called(ctx, year)
-	return args.Get(0).(time.Duration), args.Error(1)
+	duration, ok := args.Get(0).(time.Duration)
+	if !ok {
+		return 0, args.Error(1)
+	}
+	return duration, args.Error(1)
 }
 
 func TestGetAvailableYears(t *testing.T) {
-	tests := []struct {
+	tests := getAvailableYearsTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runAvailableYearsTest(t, tt)
+		})
+	}
+}
+
+// getAvailableYearsTestCases returns test cases for GetAvailableYears
+func getAvailableYearsTestCases() []struct {
+	name          string
+	setupMocks    func(*MockSejmClient, *MockDB)
+	expectedYears []int
+	expectedError bool
+	errorContains string
+} {
+	return []struct {
 		name          string
 		setupMocks    func(*MockSejmClient, *MockDB)
 		expectedYears []int
@@ -79,100 +123,115 @@ func TestGetAvailableYears(t *testing.T) {
 	}{
 		{
 			name: "All years available from API",
-			setupMocks: func(mc *MockSejmClient, md *MockDB) {
-				for _, year := range []int{2021, 2022, 2023, 2024, 2025} {
-					md.On("GetCacheAge", mock.Anything, year).Return(25*time.Hour, nil).Once()
-					mc.On("GetActs", mock.Anything, year).Return([]sejm.Act{{ID: fmt.Sprintf("DU/%d/1", year)}}, nil).Once()
-					md.On("StoreActs", mock.Anything, year, mock.Anything).Return(nil).Once()
-				}
-			},
+			setupMocks: setupAllYearsAvailable,
 			expectedYears: []int{2021, 2022, 2023, 2024, 2025},
 			expectedError: false,
 		},
 		{
 			name: "Mixed cache and API data",
-			setupMocks: func(mc *MockSejmClient, md *MockDB) {
-				// 2021: not in cache, no data
-				md.On("GetCacheAge", mock.Anything, 2021).Return(25*time.Hour, nil).Once()
-				mc.On("GetActs", mock.Anything, 2021).Return([]sejm.Act{}, nil).Once()
-				md.On("StoreActs", mock.Anything, 2021, mock.Anything).Return(nil).Once()
-
-				// 2022: in cache, has data
-				md.On("GetCacheAge", mock.Anything, 2022).Return(1*time.Hour, nil).Once()
-				md.On("GetActs", mock.Anything, 2022).Return([]sejm.Act{{ID: "DU/2022/1"}}, nil).Once()
-
-				// 2023: cache error, API success
-				md.On("GetCacheAge", mock.Anything, 2023).Return(0*time.Hour, errors.New("cache error")).Once()
-				mc.On("GetActs", mock.Anything, 2023).Return([]sejm.Act{{ID: "DU/2023/1"}}, nil).Once()
-				md.On("StoreActs", mock.Anything, 2023, mock.Anything).Return(nil).Once()
-
-				// 2024: cache read error, API success
-				md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
-				md.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{}, errors.New("cache read error")).Once()
-				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{{ID: "DU/2024/1"}}, nil).Once()
-				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
-
-				// 2025: API error
-				md.On("GetCacheAge", mock.Anything, 2025).Return(25*time.Hour, nil).Once()
-				mc.On("GetActs", mock.Anything, 2025).Return([]sejm.Act{}, errors.New("API error")).Once()
-			},
+			setupMocks: setupMixedCacheAndAPI,
 			expectedYears: []int{2022, 2023, 2024},
 			expectedError: false,
 		},
 		{
 			name: "All cache errors",
-			setupMocks: func(mc *MockSejmClient, md *MockDB) {
-				for _, year := range []int{2021, 2022, 2023, 2024, 2025} {
-					md.On("GetCacheAge", mock.Anything, year).Return(0*time.Hour, errors.New("cache error")).Once()
-					mc.On("GetActs", mock.Anything, year).Return(nil, errors.New("API error")).Once()
-				}
-			},
+			setupMocks: setupAllCacheErrors,
 			expectedYears: nil,
 			expectedError: true,
 			errorContains: "failed to fetch any years",
 		},
 		{
 			name: "Cache store errors",
-			setupMocks: func(mc *MockSejmClient, md *MockDB) {
-				for _, year := range []int{2021, 2022, 2023, 2024, 2025} {
-					md.On("GetCacheAge", mock.Anything, year).Return(25*time.Hour, nil).Once()
-					mc.On("GetActs", mock.Anything, year).Return([]sejm.Act{{ID: fmt.Sprintf("DU/%d/1", year)}}, nil).Once()
-					md.On("StoreActs", mock.Anything, year, mock.Anything).Return(errors.New("store error")).Once()
-				}
-			},
+			setupMocks: setupCacheStoreErrors,
 			expectedYears: []int{2021, 2022, 2023, 2024, 2025},
 			expectedError: false,
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockSejmClient)
-			mockDB := new(MockDB)
-			service := &ActService{
-				sejmClient: mockClient,
-				db:         mockDB,
-				timeout:    5 * time.Second,
-				cacheTTL:   24 * time.Hour,
-			}
-
-			tt.setupMocks(mockClient, mockDB)
-
-			years, err := service.GetAvailableYears(context.Background())
-			if tt.expectedError {
-				assert.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedYears, years)
-			}
-
-			mockClient.AssertExpectations(t)
-			mockDB.AssertExpectations(t)
-		})
+// setupAllYearsAvailable sets up mocks for all years available from API
+func setupAllYearsAvailable(mc *MockSejmClient, md *MockDB) {
+	for _, year := range []int{2021, 2022, 2023, 2024, 2025} {
+		md.On("GetCacheAge", mock.Anything, year).Return(25*time.Hour, nil).Once()
+		actID := fmt.Sprintf("DU/%d/1", year)
+		mc.On("GetActs", mock.Anything, year).Return([]sejm.Act{{ID: actID}}, nil).Once()
+		md.On("StoreActs", mock.Anything, year, mock.Anything).Return(nil).Once()
 	}
+}
+
+// setupMixedCacheAndAPI sets up mocks for mixed cache and API scenarios
+func setupMixedCacheAndAPI(mc *MockSejmClient, md *MockDB) {
+	// 2021: not in cache, no data
+	md.On("GetCacheAge", mock.Anything, 2021).Return(25*time.Hour, nil).Once()
+	mc.On("GetActs", mock.Anything, 2021).Return([]sejm.Act{}, nil).Once()
+	md.On("StoreActs", mock.Anything, 2021, mock.Anything).Return(nil).Once()
+
+	// 2022: in cache, has data
+	md.On("GetCacheAge", mock.Anything, 2022).Return(1*time.Hour, nil).Once()
+	md.On("GetActs", mock.Anything, 2022).Return([]sejm.Act{{ID: "DU/2022/1"}}, nil).Once()
+
+	// 2023: cache error, API success
+	md.On("GetCacheAge", mock.Anything, 2023).Return(0*time.Hour, errors.New("cache error")).Once()
+	mc.On("GetActs", mock.Anything, 2023).Return([]sejm.Act{{ID: "DU/2023/1"}}, nil).Once()
+	md.On("StoreActs", mock.Anything, 2023, mock.Anything).Return(nil).Once()
+
+	// 2024: cache read error, API success
+	md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
+	md.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{}, errors.New("cache read error")).Once()
+	mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{{ID: "DU/2024/1"}}, nil).Once()
+	md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
+
+	// 2025: API error
+	md.On("GetCacheAge", mock.Anything, 2025).Return(25*time.Hour, nil).Once()
+	mc.On("GetActs", mock.Anything, 2025).Return([]sejm.Act{}, errors.New("API error")).Once()
+}
+
+// setupAllCacheErrors sets up mocks for all cache errors scenario
+func setupAllCacheErrors(mc *MockSejmClient, md *MockDB) {
+	for _, year := range []int{2021, 2022, 2023, 2024, 2025} {
+		md.On("GetCacheAge", mock.Anything, year).Return(0*time.Hour, errors.New("cache error")).Once()
+		mc.On("GetActs", mock.Anything, year).Return(nil, errors.New("API error")).Once()
+	}
+}
+
+// setupCacheStoreErrors sets up mocks for cache store errors scenario
+func setupCacheStoreErrors(mc *MockSejmClient, md *MockDB) {
+	for _, year := range []int{2021, 2022, 2023, 2024, 2025} {
+		md.On("GetCacheAge", mock.Anything, year).Return(25*time.Hour, nil).Once()
+		actID := fmt.Sprintf("DU/%d/1", year)
+		mc.On("GetActs", mock.Anything, year).Return([]sejm.Act{{ID: actID}}, nil).Once()
+		md.On("StoreActs", mock.Anything, year, mock.Anything).Return(errors.New("store error")).Once()
+	}
+}
+
+// runAvailableYearsTest executes a single test case for GetAvailableYears
+func runAvailableYearsTest(t *testing.T, tt struct {
+	name          string
+	setupMocks    func(*MockSejmClient, *MockDB)
+	expectedYears []int
+	expectedError bool
+	errorContains string
+}) {
+	t.Helper()
+	mockClient := new(MockSejmClient)
+	mockDB := new(MockDB)
+	srv := service.NewActServiceWithConfig(mockClient, mockDB, 5*time.Second, 24*time.Hour)
+
+	tt.setupMocks(mockClient, mockDB)
+
+	years, err := srv.GetAvailableYears(context.Background())
+	if tt.expectedError {
+		assert.Error(t, err)
+		if tt.errorContains != "" {
+			assert.Contains(t, err.Error(), tt.errorContains)
+		}
+	} else {
+		assert.NoError(t, err)
+		assert.Equal(t, tt.expectedYears, years)
+	}
+
+	mockClient.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
 }
 
 func TestGetActsByYear(t *testing.T) {
@@ -180,14 +239,14 @@ func TestGetActsByYear(t *testing.T) {
 		name          string
 		year          int
 		setupMocks    func(*MockSejmClient, *MockDB)
-		expectedData  *BoardData
+		expectedData  *service.BoardData
 		expectedError bool
 		errorContains string
 	}{
 		{
 			name: "Data from cache",
 			year: 2024,
-			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+			setupMocks: func(_ *MockSejmClient, md *MockDB) {
 				md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
 				md.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
 					{ID: "DU/2024/1", Status: "obowiązujący"},
@@ -195,7 +254,7 @@ func TestGetActsByYear(t *testing.T) {
 					{ID: "DU/2024/3", Status: "W przygotowaniu"},
 				}, nil).Once()
 			},
-			expectedData: &BoardData{
+			expectedData: &service.BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{{ID: "DU/2024/2", Status: "uchylony"}},
 				Pending:      []sejm.Act{{ID: "DU/2024/3", Status: "W przygotowaniu"}},
@@ -213,7 +272,7 @@ func TestGetActsByYear(t *testing.T) {
 				}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
 			},
-			expectedData: &BoardData{
+			expectedData: &service.BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{{ID: "DU/2024/2", Status: "uchylony"}},
 				Pending:      []sejm.Act{},
@@ -230,7 +289,7 @@ func TestGetActsByYear(t *testing.T) {
 				}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
 			},
-			expectedData: &BoardData{
+			expectedData: &service.BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{},
 				Pending:      []sejm.Act{},
@@ -248,7 +307,7 @@ func TestGetActsByYear(t *testing.T) {
 				}, nil).Once()
 				md.On("StoreActs", mock.Anything, 2024, mock.Anything).Return(nil).Once()
 			},
-			expectedData: &BoardData{
+			expectedData: &service.BoardData{
 				Obowiazujace: []sejm.Act{{ID: "DU/2024/1", Status: "obowiązujący"}},
 				Uchylone:     []sejm.Act{},
 				Pending:      []sejm.Act{},
@@ -282,30 +341,7 @@ func TestGetActsByYear(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockSejmClient)
-			mockDB := new(MockDB)
-			service := &ActService{
-				sejmClient: mockClient,
-				db:         mockDB,
-				timeout:    5 * time.Second,
-				cacheTTL:   24 * time.Hour,
-			}
-
-			tt.setupMocks(mockClient, mockDB)
-
-			data, err := service.GetActsByYear(context.Background(), tt.year)
-			if tt.expectedError {
-				assert.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedData, data)
-			}
-
-			mockClient.AssertExpectations(t)
-			mockDB.AssertExpectations(t)
+			runActsByYearTest(t, tt)
 		})
 	}
 }
@@ -324,7 +360,7 @@ func TestGetActDetails(t *testing.T) {
 			name:     "Data from cache",
 			year:     "2024",
 			position: "123",
-			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+			setupMocks: func(_ *MockSejmClient, md *MockDB) {
 				md.On("GetActDetails", mock.Anything, "DU/2024/123").Return(&sejm.ActDetails{
 					ID:        "DU/2024/123",
 					Title:     "Test Act",
@@ -422,30 +458,70 @@ func TestGetActDetails(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockSejmClient)
-			mockDB := new(MockDB)
-			service := &ActService{
-				sejmClient: mockClient,
-				db:         mockDB,
-				timeout:    5 * time.Second,
-				cacheTTL:   24 * time.Hour,
-			}
-
-			tt.setupMocks(mockClient, mockDB)
-
-			data, err := service.GetActDetails(context.Background(), tt.year, tt.position)
-			if tt.expectedError {
-				assert.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedData, data)
-			}
-
-			mockClient.AssertExpectations(t)
-			mockDB.AssertExpectations(t)
+			runActDetailsTest(t, tt)
 		})
 	}
+}
+
+// runActsByYearTest executes a single test case for GetActsByYear
+func runActsByYearTest(t *testing.T, tt struct {
+	name          string
+	year          int
+	setupMocks    func(*MockSejmClient, *MockDB)
+	expectedData  *service.BoardData
+	expectedError bool
+	errorContains string
+}) {
+	t.Helper()
+	mockClient := new(MockSejmClient)
+	mockDB := new(MockDB)
+	srv := service.NewActServiceWithConfig(mockClient, mockDB, 5*time.Second, 24*time.Hour)
+
+	tt.setupMocks(mockClient, mockDB)
+
+	data, err := srv.GetActsByYear(context.Background(), tt.year)
+	if tt.expectedError {
+		assert.Error(t, err)
+		if tt.errorContains != "" {
+			assert.Contains(t, err.Error(), tt.errorContains)
+		}
+	} else {
+		assert.NoError(t, err)
+		assert.Equal(t, tt.expectedData, data)
+	}
+
+	mockClient.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
+}
+
+// runActDetailsTest executes a single test case for GetActDetails
+func runActDetailsTest(t *testing.T, tt struct {
+	name          string
+	year          string
+	position      string
+	setupMocks    func(*MockSejmClient, *MockDB)
+	expectedData  *sejm.ActDetails
+	expectedError bool
+	errorContains string
+}) {
+	t.Helper()
+	mockClient := new(MockSejmClient)
+	mockDB := new(MockDB)
+	srv := service.NewActServiceWithConfig(mockClient, mockDB, 5*time.Second, 24*time.Hour)
+
+	tt.setupMocks(mockClient, mockDB)
+
+	data, err := srv.GetActDetails(context.Background(), tt.year, tt.position)
+	if tt.expectedError {
+		assert.Error(t, err)
+		if tt.errorContains != "" {
+			assert.Contains(t, err.Error(), tt.errorContains)
+		}
+	} else {
+		assert.NoError(t, err)
+		assert.Equal(t, tt.expectedData, data)
+	}
+
+	mockClient.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
 }

@@ -1,35 +1,37 @@
-package db
+package db_test
 
 import (
 	"context"
 	"os"
 	"testing"
 	"time"
+	"ustawka/db"
 	"ustawka/sejm"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) (*DB, func()) {
+func setupTestDB(t *testing.T) (*db.DB, func()) {
+	t.Helper()
 	// Create a temporary database file
 	tmpfile, err := os.CreateTemp("", "testdb-*.db")
 	require.NoError(t, err)
 
-	db, err := New(tmpfile.Name())
+	database, err := db.New(tmpfile.Name())
 	require.NoError(t, err)
 
 	// Return cleanup function
 	cleanup := func() {
-		db.Close()
+		database.Close()
 		os.Remove(tmpfile.Name())
 	}
 
-	return db, cleanup
+	return database, cleanup
 }
 
 func TestStoreAndGetActs(t *testing.T) {
-	db, cleanup := setupTestDB(t)
+	database, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -60,25 +62,25 @@ func TestStoreAndGetActs(t *testing.T) {
 	}
 
 	// Store acts
-	err := db.StoreActs(ctx, year, acts)
+	err := database.StoreActs(ctx, year, acts)
 	require.NoError(t, err)
 
 	// Retrieve acts
-	retrieved, err := db.GetActs(ctx, year)
+	retrieved, err := database.GetActs(ctx, year)
 	require.NoError(t, err)
 	assert.Len(t, retrieved, 2)
 	assert.Equal(t, acts, retrieved)
 
 	// Test cache age
 	time.Sleep(time.Millisecond) // Ensure some time has passed
-	age, err := db.GetCacheAge(ctx, year)
+	age, err := database.GetCacheAge(ctx, year)
 	require.NoError(t, err)
 	assert.True(t, age > 0)
 	assert.True(t, age < time.Second)
 }
 
 func TestStoreAndGetActDetails(t *testing.T) {
-	db, cleanup := setupTestDB(t)
+	database, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -92,22 +94,22 @@ func TestStoreAndGetActDetails(t *testing.T) {
 	}
 
 	// Store details
-	err := db.StoreActDetails(ctx, details)
+	err := database.StoreActDetails(ctx, details)
 	require.NoError(t, err)
 
 	// Retrieve details
-	retrieved, err := db.GetActDetails(ctx, details.ID)
+	retrieved, err := database.GetActDetails(ctx, details.ID)
 	require.NoError(t, err)
 	assert.Equal(t, details, retrieved)
 
 	// Test non-existent details
-	nonExistent, err := db.GetActDetails(ctx, "DU/2024/999")
+	nonExistent, err := database.GetActDetails(ctx, "DU/2024/999")
 	require.NoError(t, err)
 	assert.Nil(t, nonExistent)
 }
 
 func TestUpdateActDetails(t *testing.T) {
-	db, cleanup := setupTestDB(t)
+	database, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -121,7 +123,7 @@ func TestUpdateActDetails(t *testing.T) {
 	}
 
 	// Store initial details
-	err := db.StoreActDetails(ctx, details)
+	err := database.StoreActDetails(ctx, details)
 	require.NoError(t, err)
 
 	// Update details
@@ -132,11 +134,11 @@ func TestUpdateActDetails(t *testing.T) {
 		Published: "2024-01-02",
 	}
 
-	err = db.StoreActDetails(ctx, updated)
+	err = database.StoreActDetails(ctx, updated)
 	require.NoError(t, err)
 
 	// Retrieve updated details
-	retrieved, err := db.GetActDetails(ctx, details.ID)
+	retrieved, err := database.GetActDetails(ctx, details.ID)
 	require.NoError(t, err)
 	assert.Equal(t, updated, retrieved)
 }
