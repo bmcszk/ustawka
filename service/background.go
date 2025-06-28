@@ -103,14 +103,13 @@ func NewBackgroundService(
 	config *BackgroundConfig,
 ) *BackgroundService {
 	// Create monitoring service with default config
-	monitoringConfig := DefaultMonitoringConfig()
-	monitoringService := NewMonitoringService(database, monitoringConfig)
+	monitoringService := NewMonitoringService(database)
 	
 	// Add default notification channels
 	monitoringService.AddNotificationChannel(NewLogNotificationChannel("default"))
 	
 	// Create validation service
-	validationService := NewDataValidationService(nil)
+	validationService := NewDataValidationService()
 	
 	return &BackgroundService{
 		pipeline:          pipeline,
@@ -200,9 +199,8 @@ func (bs *BackgroundService) Start(ctx context.Context) error {
 // Stop gracefully stops all background services
 func (bs *BackgroundService) Stop() {
 	bs.mu.Lock()
-	defer bs.mu.Unlock()
-	
 	if !bs.running {
+		bs.mu.Unlock()
 		return
 	}
 	
@@ -217,6 +215,9 @@ func (bs *BackgroundService) Stop() {
 	
 	// Stop background workers
 	close(bs.stopChan)
+	bs.mu.Unlock() // Release lock before waiting for goroutines
+	
+	// Wait for goroutines to finish (without holding the mutex)
 	bs.wg.Wait()
 	
 	slog.Info("Background enrichment service stopped")
@@ -231,8 +232,15 @@ func (bs *BackgroundService) syncScheduler(ctx context.Context) {
 	defer fullSyncTicker.Stop()
 	defer incrementalTicker.Stop()
 	
-	// Run initial sync
-	bs.runIncrementalSync(ctx)
+	// Run initial sync (with early termination check)
+	select {
+	case <-ctx.Done():
+		return
+	case <-bs.stopChan:
+		return
+	default:
+		bs.runIncrementalSync(ctx)
+	}
 	
 	for {
 		select {
@@ -255,8 +263,15 @@ func (bs *BackgroundService) enrichmentScheduler(ctx context.Context) {
 	ticker := time.NewTicker(bs.config.EnrichmentInterval)
 	defer ticker.Stop()
 	
-	// Run initial enrichment
-	bs.runEnrichmentCycle(ctx)
+	// Run initial enrichment (with early termination check)
+	select {
+	case <-ctx.Done():
+		return
+	case <-bs.stopChan:
+		return
+	default:
+		bs.runEnrichmentCycle(ctx)
+	}
 	
 	for {
 		select {
@@ -320,7 +335,7 @@ func (bs *BackgroundService) runFullSync(ctx context.Context) {
 	
 	// Process each year
 	for _, year := range bs.config.YearsToProcess {
-		if err := bs.syncYear(ctx, year, SyncOptions{ForceSync: true}); err != nil {
+		if err := bs.syncYear(ctx, year, syncOptions{ForceSync: true}); err != nil {
 			slog.Error("Failed to sync year in full sync", "year", year, "error", err)
 			bs.incrementErrorCount()
 		}
@@ -338,7 +353,7 @@ func (bs *BackgroundService) runIncrementalSync(ctx context.Context) {
 	
 	// Focus on current year for incremental updates
 	currentYear := bs.config.CurrentYear
-	if err := bs.syncYear(ctx, currentYear, SyncOptions{ForceSync: false}); err != nil {
+	if err := bs.syncYear(ctx, currentYear, syncOptions{ForceSync: false}); err != nil {
 		slog.Error("Failed incremental sync", "year", currentYear, "error", err)
 		bs.incrementErrorCount()
 		return
@@ -348,13 +363,13 @@ func (bs *BackgroundService) runIncrementalSync(ctx context.Context) {
 	slog.Info("Completed incremental synchronization", "duration", duration)
 }
 
-// SyncOptions contains options for sync operations
-type SyncOptions struct {
+// syncOptions contains options for sync operations (private)
+type syncOptions struct {
 	ForceSync bool
 }
 
 // syncYear synchronizes data for a specific year
-func (bs *BackgroundService) syncYear(ctx context.Context, year int, opts SyncOptions) error {
+func (bs *BackgroundService) syncYear(ctx context.Context, year int, opts syncOptions) error {
 	// Check if sync is needed
 	if !opts.ForceSync {
 		cacheAge, err := bs.db.GetCacheAge(ctx, year)
@@ -375,10 +390,15 @@ func (bs *BackgroundService) syncYear(ctx context.Context, year int, opts SyncOp
 		return fmt.Errorf("failed to store acts for year %d: %w", year, err)
 	}
 	
-	// Update processed count
-	bs.mu.Lock()
-	bs.processedToday += int64(len(acts))
-	bs.mu.Unlock()
+	// Update processed count (check for cancellation first)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		bs.mu.Lock()
+		bs.processedToday += int64(len(acts))
+		bs.mu.Unlock()
+	}
 	
 	slog.Info("Synchronized acts for year", "year", year, "count", len(acts))
 	return nil
@@ -389,10 +409,15 @@ func (bs *BackgroundService) runEnrichmentCycle(ctx context.Context) {
 	startTime := time.Now()
 	slog.Info("Starting enrichment cycle")
 	
-	// Mark enrichment start
-	bs.mu.Lock()
-	bs.lastEnrichmentRun = startTime
-	bs.mu.Unlock()
+	// Mark enrichment start (check for cancellation first)
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		bs.mu.Lock()
+		bs.lastEnrichmentRun = startTime
+		bs.mu.Unlock()
+	}
 	
 	enrichedCount := 0
 	

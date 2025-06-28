@@ -77,7 +77,7 @@ func TestExportActs_JSON(t *testing.T) {
 	assert.Contains(t, result.Filename, ".json")
 	
 	// Verify JSON structure
-	var exported map[string]interface{}
+	var exported map[string]any
 	err = json.Unmarshal(result.Data, &exported)
 	assert.NoError(t, err)
 	assert.Contains(t, exported, "metadata")
@@ -262,8 +262,8 @@ func TestExportComparison_JSON(t *testing.T) {
 				FieldLabel:    "Status",
 				LeftValue:     "obowiązujący",
 				RightValue:    "pending",
-				DifferenceType: service.DiffTypeValueChanged,
-				Severity:      service.DiffSeverityCritical,
+				DifferenceType: "value_changed",
+				Severity:      "critical",
 				Description:   "Different status",
 			},
 		},
@@ -325,8 +325,8 @@ func TestExportComparison_CSV(t *testing.T) {
 				FieldLabel:    "Tytuł",
 				LeftValue:     "Act A",
 				RightValue:    "Act B",
-				DifferenceType: service.DiffTypeValueChanged,
-				Severity:      service.DiffSeverityMajor,
+				DifferenceType: "value_changed",
+				Severity:      "major",
 				Description:   "Different titles",
 			},
 		},
@@ -378,8 +378,8 @@ func TestExportComparison_PDF(t *testing.T) {
 				FieldLabel:    "Tytuł",
 				LeftValue:     "Healthcare Act",
 				RightValue:    "Education Act",
-				DifferenceType: service.DiffTypeValueChanged,
-				Severity:      service.DiffSeverityMajor,
+				DifferenceType: "value_changed",
+				Severity:      "major",
 				Description:   "Different act titles",
 			},
 		},

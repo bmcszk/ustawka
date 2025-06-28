@@ -66,17 +66,17 @@ type SearchResult struct {
 
 // SearchFacets provides filter options based on current data
 type SearchFacets struct {
-	AvailableStatuses      []FacetItem `json:"available_statuses"`
-	AvailableStages        []FacetItem `json:"available_stages"`
-	AvailableInitiators    []FacetItem `json:"available_initiators"`
-	AvailableCommittees    []FacetItem `json:"available_committees"`
-	AvailableTags          []FacetItem `json:"available_tags"`
+	AvailableStatuses      []facetItem `json:"available_statuses"`
+	AvailableStages        []facetItem `json:"available_stages"`
+	AvailableInitiators    []facetItem `json:"available_initiators"`
+	AvailableCommittees    []facetItem `json:"available_committees"`
+	AvailableTags          []facetItem `json:"available_tags"`
 	YearRange              YearRange   `json:"year_range"`
-	DaysInStageRange       Range       `json:"days_in_stage_range"`
+	DaysInStageRange       searchRange `json:"days_in_stage_range"`
 }
 
-// FacetItem represents a filter option with count
-type FacetItem struct {
+// facetItem represents a filter option with count
+type facetItem struct {
 	Value string `json:"value"`
 	Count int    `json:"count"`
 	Label string `json:"label"`
@@ -89,7 +89,7 @@ type YearRange struct {
 }
 
 // Range represents min/max numeric values
-type Range struct {
+type searchRange struct {
 	Min int `json:"min"`
 	Max int `json:"max"`
 }
@@ -171,106 +171,160 @@ func (s *SearchService) applyFilters(acts []sejm.EnhancedAct, criteria *SearchCr
 
 // matchesFilters checks if an act matches all filter criteria
 func (s *SearchService) matchesFilters(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
-	// Text search - search in title, ID, and other text fields
-	if criteria.Query != "" {
-		query := strings.ToLower(criteria.Query)
-		searchText := strings.ToLower(act.Title + " " + act.ID + " " + act.CurrentStage + " " + act.InitiatorType)
-		if !strings.Contains(searchText, query) {
-			return false
-		}
+	return s.matchesTextFilters(act, criteria) &&
+		s.matchesStatusFilters(act, criteria) &&
+		s.matchesRangeFilters(act, criteria) &&
+		s.matchesVotingFilters(act, criteria) &&
+		s.matchesMetadataFilters(act, criteria)
+}
+
+// matchesTextFilters checks text-based search criteria
+func (*SearchService) matchesTextFilters(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
+	return matchesGeneralQuery(act, criteria.Query) &&
+		matchesTitleSearch(act, criteria.TitleSearch) &&
+		matchesInitiatorSearch(act, criteria.InitiatorSearch)
+}
+
+// matchesGeneralQuery checks if act matches general text query
+func matchesGeneralQuery(act *sejm.EnhancedAct, query string) bool {
+	if query == "" {
+		return true
 	}
 	
-	// Title-specific search
-	if criteria.TitleSearch != "" {
-		if !strings.Contains(strings.ToLower(act.Title), strings.ToLower(criteria.TitleSearch)) {
-			return false
-		}
+	queryLower := strings.ToLower(query)
+	searchText := strings.ToLower(act.Title + " " + act.ID + " " + act.CurrentStage + " " + act.InitiatorType)
+	return strings.Contains(searchText, queryLower)
+}
+
+// matchesTitleSearch checks if act title matches search criteria
+func matchesTitleSearch(act *sejm.EnhancedAct, titleSearch string) bool {
+	if titleSearch == "" {
+		return true
 	}
 	
-	// Initiator search
-	if criteria.InitiatorSearch != "" {
-		if !strings.Contains(strings.ToLower(act.InitiatorType), strings.ToLower(criteria.InitiatorSearch)) {
-			return false
-		}
+	return strings.Contains(strings.ToLower(act.Title), strings.ToLower(titleSearch))
+}
+
+// matchesInitiatorSearch checks if act initiator matches search criteria
+func matchesInitiatorSearch(act *sejm.EnhancedAct, initiatorSearch string) bool {
+	if initiatorSearch == "" {
+		return true
 	}
 	
-	// Status filters
-	if len(criteria.Statuses) > 0 {
-		found := false
-		for _, status := range criteria.Statuses {
-			if act.Status == status {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
+	return strings.Contains(strings.ToLower(act.InitiatorType), strings.ToLower(initiatorSearch))
+}
+
+// matchesStatusFilters checks status-related criteria
+func (*SearchService) matchesStatusFilters(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
+	return matchesBasicStatusFilter(act, criteria.Statuses) &&
+		matchesDetailedStatusFilter(act, criteria.DetailedStatuses) &&
+		matchesCurrentStageFilter(act, criteria.CurrentStages)
+}
+
+// matchesBasicStatusFilter checks if act matches basic status criteria
+func matchesBasicStatusFilter(act *sejm.EnhancedAct, statuses []string) bool {
+	if len(statuses) == 0 {
+		return true
 	}
 	
-	// Detailed status filters
-	if len(criteria.DetailedStatuses) > 0 {
-		found := false
-		for _, status := range criteria.DetailedStatuses {
-			if act.DetailedStatus == status {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+	for _, status := range statuses {
+		if act.Status == status {
+			return true
 		}
 	}
-	
-	// Current stage filters
-	if len(criteria.CurrentStages) > 0 {
-		found := false
-		for _, stage := range criteria.CurrentStages {
-			if strings.Contains(act.CurrentStage, stage) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
+	return false
+}
+
+// matchesDetailedStatusFilter checks if act matches detailed status criteria
+func matchesDetailedStatusFilter(act *sejm.EnhancedAct, detailedStatuses []string) bool {
+	if len(detailedStatuses) == 0 {
+		return true
 	}
 	
-	// Year range filter
-	if criteria.YearFrom != nil && act.Year < *criteria.YearFrom {
+	for _, status := range detailedStatuses {
+		if act.DetailedStatus == status {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesCurrentStageFilter checks if act matches current stage criteria
+func matchesCurrentStageFilter(act *sejm.EnhancedAct, currentStages []string) bool {
+	if len(currentStages) == 0 {
+		return true
+	}
+	
+	for _, stage := range currentStages {
+		if strings.Contains(act.CurrentStage, stage) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesRangeFilters checks numeric and date range criteria
+func (*SearchService) matchesRangeFilters(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
+	return matchesYearRange(act, criteria.YearFrom, criteria.YearTo) &&
+		matchesPositionRange(act, criteria.PositionFrom, criteria.PositionTo) &&
+		matchesDaysInStageRange(act, criteria.DaysInStageMin, criteria.DaysInStageMax) &&
+		matchesStageDateRange(act, criteria.StageFrom, criteria.StageTo)
+}
+
+// matchesYearRange checks if act year is within specified range
+func matchesYearRange(act *sejm.EnhancedAct, yearFrom, yearTo *int) bool {
+	if yearFrom != nil && act.Year < *yearFrom {
 		return false
 	}
-	if criteria.YearTo != nil && act.Year > *criteria.YearTo {
+	if yearTo != nil && act.Year > *yearTo {
 		return false
 	}
-	
-	// Position range filter
-	if criteria.PositionFrom != nil && act.Position < *criteria.PositionFrom {
+	return true
+}
+
+// matchesPositionRange checks if act position is within specified range
+func matchesPositionRange(act *sejm.EnhancedAct, positionFrom, positionTo *int) bool {
+	if positionFrom != nil && act.Position < *positionFrom {
 		return false
 	}
-	if criteria.PositionTo != nil && act.Position > *criteria.PositionTo {
+	if positionTo != nil && act.Position > *positionTo {
 		return false
 	}
-	
-	// Days in stage filter
-	if criteria.DaysInStageMin != nil && act.DaysInStage < *criteria.DaysInStageMin {
+	return true
+}
+
+// matchesDaysInStageRange checks if days in stage is within specified range
+func matchesDaysInStageRange(act *sejm.EnhancedAct, daysMin, daysMax *int) bool {
+	if daysMin != nil && act.DaysInStage < *daysMin {
 		return false
 	}
-	if criteria.DaysInStageMax != nil && act.DaysInStage > *criteria.DaysInStageMax {
+	if daysMax != nil && act.DaysInStage > *daysMax {
 		return false
 	}
-	
-	// Stage date filters
-	if !act.StageDate.IsZero() {
-		if criteria.StageFrom != nil && act.StageDate.Before(*criteria.StageFrom) {
-			return false
-		}
-		if criteria.StageTo != nil && act.StageDate.After(*criteria.StageTo) {
-			return false
-		}
+	return true
+}
+
+// matchesStageDateRange checks if stage date is within specified range
+func matchesStageDateRange(act *sejm.EnhancedAct, stageFrom, stageTo *time.Time) bool {
+	if act.StageDate.IsZero() {
+		return true
 	}
-	
-	// Voting filters
+	if stageFrom != nil && act.StageDate.Before(*stageFrom) {
+		return false
+	}
+	if stageTo != nil && act.StageDate.After(*stageTo) {
+		return false
+	}
+	return true
+}
+
+// matchesVotingFilters checks voting-related criteria
+func (s *SearchService) matchesVotingFilters(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
+	return s.matchesVotingPresence(act, criteria) && s.matchesVotingResult(act, criteria.VotingResult)
+}
+
+// matchesVotingPresence checks if act matches voting presence criteria
+func (*SearchService) matchesVotingPresence(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
 	if criteria.HasSejmVotes != nil {
 		hasSejmVotes := len(act.SejmVotes) > 0
 		if *criteria.HasSejmVotes != hasSejmVotes {
@@ -285,76 +339,80 @@ func (s *SearchService) matchesFilters(act *sejm.EnhancedAct, criteria *SearchCr
 		}
 	}
 	
-	// Voting result filter
-	if criteria.VotingResult != "" {
-		switch criteria.VotingResult {
-		case "passed":
-			if !s.hasPassedVotes(act) {
-				return false
-			}
-		case "failed":
-			if !s.hasFailedVotes(act) {
-				return false
-			}
-		case "pending":
-			if len(act.SejmVotes) > 0 || len(act.SenateVotes) > 0 {
-				return false
-			}
-		}
-	}
-	
-	// Committee filter
-	if len(criteria.CommitteeCodes) > 0 {
-		found := false
-		for _, code := range criteria.CommitteeCodes {
-			if strings.Contains(act.CommitteeCode, code) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	
-	// Initiator type filter
-	if len(criteria.InitiatorTypes) > 0 {
-		found := false
-		for _, initiator := range criteria.InitiatorTypes {
-			if strings.Contains(act.InitiatorType, initiator) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	
-	// Tags filter
-	if len(criteria.Tags) > 0 {
-		found := false
-		for _, tag := range criteria.Tags {
-			for _, actTag := range act.Tags {
-				if strings.EqualFold(actTag, tag) {
-					found = true
-					break
-				}
-			}
-			if found {
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	
 	return true
 }
 
+// matchesVotingResult checks if act matches voting result criteria
+func (s *SearchService) matchesVotingResult(act *sejm.EnhancedAct, votingResult string) bool {
+	if votingResult == "" {
+		return true
+	}
+	
+	switch votingResult {
+	case "passed":
+		return s.hasPassedVotes(act)
+	case "failed":
+		return s.hasFailedVotes(act)
+	case "pending":
+		return len(act.SejmVotes) == 0 && len(act.SenateVotes) == 0
+	default:
+		return true
+	}
+}
+
+// matchesMetadataFilters checks metadata-related criteria
+func (*SearchService) matchesMetadataFilters(act *sejm.EnhancedAct, criteria *SearchCriteria) bool {
+	return matchesCommitteeFilter(act, criteria.CommitteeCodes) &&
+		matchesInitiatorTypeFilter(act, criteria.InitiatorTypes) &&
+		matchesTagsFilter(act, criteria.Tags)
+}
+
+// matchesCommitteeFilter checks if act matches committee code criteria
+func matchesCommitteeFilter(act *sejm.EnhancedAct, committeeCodes []string) bool {
+	if len(committeeCodes) == 0 {
+		return true
+	}
+	
+	for _, code := range committeeCodes {
+		if strings.Contains(act.CommitteeCode, code) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesInitiatorTypeFilter checks if act matches initiator type criteria
+func matchesInitiatorTypeFilter(act *sejm.EnhancedAct, initiatorTypes []string) bool {
+	if len(initiatorTypes) == 0 {
+		return true
+	}
+	
+	for _, initiator := range initiatorTypes {
+		if strings.Contains(act.InitiatorType, initiator) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesTagsFilter checks if act matches tag criteria
+func matchesTagsFilter(act *sejm.EnhancedAct, tags []string) bool {
+	if len(tags) == 0 {
+		return true
+	}
+	
+	for _, tag := range tags {
+		for _, actTag := range act.Tags {
+			if strings.EqualFold(actTag, tag) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // hasPassedVotes checks if act has passed votes
-func (s *SearchService) hasPassedVotes(act *sejm.EnhancedAct) bool {
+func (*SearchService) hasPassedVotes(act *sejm.EnhancedAct) bool {
 	for _, vote := range act.SejmVotes {
 		if vote.YesVotes > vote.NoVotes {
 			return true
@@ -369,7 +427,7 @@ func (s *SearchService) hasPassedVotes(act *sejm.EnhancedAct) bool {
 }
 
 // hasFailedVotes checks if act has failed votes
-func (s *SearchService) hasFailedVotes(act *sejm.EnhancedAct) bool {
+func (*SearchService) hasFailedVotes(act *sejm.EnhancedAct) bool {
 	for _, vote := range act.SejmVotes {
 		if vote.NoVotes > vote.YesVotes {
 			return true
@@ -385,44 +443,54 @@ func (s *SearchService) hasFailedVotes(act *sejm.EnhancedAct) bool {
 
 // sortActs sorts the filtered acts based on criteria
 func (s *SearchService) sortActs(acts []sejm.EnhancedAct, criteria *SearchCriteria) {
-	if criteria.SortBy == "" {
-		criteria.SortBy = "date" // Default sort
-	}
-	if criteria.SortOrder == "" {
-		criteria.SortOrder = "desc" // Default order
-	}
-	
+	s.setSortDefaults(criteria)
 	sort.Slice(acts, func(i, j int) bool {
-		var less bool
-		
-		switch criteria.SortBy {
-		case "title":
-			less = acts[i].Title < acts[j].Title
-		case "position":
-			less = acts[i].Position < acts[j].Position
-		case "year":
-			less = acts[i].Year < acts[j].Year
-		case "stage_date":
-			less = acts[i].StageDate.Before(acts[j].StageDate)
-		case "days_in_stage":
-			less = acts[i].DaysInStage < acts[j].DaysInStage
-		default: // "date" - sort by year and position
-			if acts[i].Year != acts[j].Year {
-				less = acts[i].Year < acts[j].Year
-			} else {
-				less = acts[i].Position < acts[j].Position
-			}
-		}
-		
-		if criteria.SortOrder == "desc" {
-			return !less
-		}
-		return less
+		return s.compareActs(&acts[i], &acts[j], criteria)
 	})
 }
 
+// setSortDefaults sets default sort criteria if not specified
+func (*SearchService) setSortDefaults(criteria *SearchCriteria) {
+	if criteria.SortBy == "" {
+		criteria.SortBy = "date"
+	}
+	if criteria.SortOrder == "" {
+		criteria.SortOrder = "desc"
+	}
+}
+
+// compareActs compares two acts based on sort criteria
+func (*SearchService) compareActs(left, right *sejm.EnhancedAct, criteria *SearchCriteria) bool {
+	less := compareActsByField(left, right, criteria.SortBy)
+	if criteria.SortOrder == "desc" {
+		return !less
+	}
+	return less
+}
+
+// compareActsByField compares acts by specific field
+func compareActsByField(left, right *sejm.EnhancedAct, sortBy string) bool {
+	switch sortBy {
+	case "title":
+		return left.Title < right.Title
+	case "position":
+		return left.Position < right.Position
+	case "year":
+		return left.Year < right.Year
+	case "stage_date":
+		return left.StageDate.Before(right.StageDate)
+	case "days_in_stage":
+		return left.DaysInStage < right.DaysInStage
+	default: // "date" - sort by year and position
+		if left.Year != right.Year {
+			return left.Year < right.Year
+		}
+		return left.Position < right.Position
+	}
+}
+
 // applyPagination applies limit and offset to results
-func (s *SearchService) applyPagination(acts []sejm.EnhancedAct, criteria *SearchCriteria) []sejm.EnhancedAct {
+func (*SearchService) applyPagination(acts []sejm.EnhancedAct, criteria *SearchCriteria) []sejm.EnhancedAct {
 	if criteria.Limit <= 0 {
 		criteria.Limit = 50 // Default limit
 	}
@@ -444,85 +512,123 @@ func (s *SearchService) applyPagination(acts []sejm.EnhancedAct, criteria *Searc
 }
 
 // generateFacets creates facet data for filtering UI
-func (s *SearchService) generateFacets(allActs, filteredActs []sejm.EnhancedAct) SearchFacets {
-	facets := SearchFacets{}
+func (s *SearchService) generateFacets(_, filteredActs []sejm.EnhancedAct) SearchFacets {
+	counts := s.initializeFacetCounts()
+	ranges := s.initializeRanges()
 	
-	// Count occurrences for facets
-	statusCounts := make(map[string]int)
-	stageCounts := make(map[string]int)
-	initiatorCounts := make(map[string]int)
-	committeeCounts := make(map[string]int)
-	tagCounts := make(map[string]int)
+	s.processFacetData(filteredActs, counts, ranges)
 	
-	minYear, maxYear := 9999, 0
-	minDays, maxDays := 999999, 0
-	
-	for _, act := range filteredActs {
-		// Status counts
-		if act.Status != "" {
-			statusCounts[act.Status]++
-		}
-		if act.DetailedStatus != "" {
-			statusCounts[act.DetailedStatus]++
-		}
-		
-		// Stage counts
-		if act.CurrentStage != "" {
-			stageCounts[act.CurrentStage]++
-		}
-		
-		// Initiator counts
-		if act.InitiatorType != "" {
-			initiatorCounts[act.InitiatorType]++
-		}
-		
-		// Committee counts
-		if act.CommitteeCode != "" {
-			committeeCounts[act.CommitteeCode]++
-		}
-		
-		// Tag counts
-		for _, tag := range act.Tags {
-			if tag != "" {
-				tagCounts[tag]++
-			}
-		}
-		
-		// Ranges
-		if act.Year < minYear {
-			minYear = act.Year
-		}
-		if act.Year > maxYear {
-			maxYear = act.Year
-		}
-		
-		if act.DaysInStage < minDays {
-			minDays = act.DaysInStage
-		}
-		if act.DaysInStage > maxDays {
-			maxDays = act.DaysInStage
+	return s.buildFacets(counts, ranges)
+}
+
+// facetCounts holds all counting maps
+type facetCounts struct {
+	status    map[string]int
+	stage     map[string]int
+	initiator map[string]int
+	committee map[string]int
+	tag       map[string]int
+}
+
+// facetRanges holds min/max ranges
+type facetRanges struct {
+	minYear, maxYear int
+	minDays, maxDays int
+}
+
+// initializeFacetCounts creates empty counting maps
+func (*SearchService) initializeFacetCounts() *facetCounts {
+	return &facetCounts{
+		status:    make(map[string]int),
+		stage:     make(map[string]int),
+		initiator: make(map[string]int),
+		committee: make(map[string]int),
+		tag:       make(map[string]int),
+	}
+}
+
+// initializeRanges creates initial range values
+func (*SearchService) initializeRanges() *facetRanges {
+	return &facetRanges{
+		minYear: 9999,
+		maxYear: 0,
+		minDays: 999999,
+		maxDays: 0,
+	}
+}
+
+// processFacetData processes acts to populate counts and ranges
+func (*SearchService) processFacetData(acts []sejm.EnhancedAct, counts *facetCounts, ranges *facetRanges) {
+	for _, act := range acts {
+		updateStatusCounts(counts, &act)
+		updateMetadataCounts(counts, &act)
+		updateRanges(ranges, &act)
+	}
+}
+
+// updateStatusCounts updates status and stage counts
+func updateStatusCounts(counts *facetCounts, act *sejm.EnhancedAct) {
+	if act.Status != "" {
+		counts.status[act.Status]++
+	}
+	if act.DetailedStatus != "" {
+		counts.status[act.DetailedStatus]++
+	}
+	if act.CurrentStage != "" {
+		counts.stage[act.CurrentStage]++
+	}
+}
+
+// updateMetadataCounts updates initiator, committee, and tag counts
+func updateMetadataCounts(counts *facetCounts, act *sejm.EnhancedAct) {
+	if act.InitiatorType != "" {
+		counts.initiator[act.InitiatorType]++
+	}
+	if act.CommitteeCode != "" {
+		counts.committee[act.CommitteeCode]++
+	}
+	for _, tag := range act.Tags {
+		if tag != "" {
+			counts.tag[tag]++
 		}
 	}
-	
-	// Convert to facet items
-	facets.AvailableStatuses = s.countsToFacets(statusCounts)
-	facets.AvailableStages = s.countsToFacets(stageCounts)
-	facets.AvailableInitiators = s.countsToFacets(initiatorCounts)
-	facets.AvailableCommittees = s.countsToFacets(committeeCounts)
-	facets.AvailableTags = s.countsToFacets(tagCounts)
-	
-	facets.YearRange = YearRange{Min: minYear, Max: maxYear}
-	facets.DaysInStageRange = Range{Min: minDays, Max: maxDays}
-	
-	return facets
+}
+
+// updateRanges updates min/max ranges
+func updateRanges(ranges *facetRanges, act *sejm.EnhancedAct) {
+	if act.Year < ranges.minYear {
+		ranges.minYear = act.Year
+	}
+	if act.Year > ranges.maxYear {
+		ranges.maxYear = act.Year
+	}
+	if act.DaysInStage < ranges.minDays {
+		ranges.minDays = act.DaysInStage
+	}
+	if act.DaysInStage > ranges.maxDays {
+		ranges.maxDays = act.DaysInStage
+	}
+}
+
+// buildFacets constructs final SearchFacets from counts and ranges
+func (s *SearchService) buildFacets(counts *facetCounts, ranges *facetRanges) SearchFacets {
+	return SearchFacets{
+		AvailableStatuses:   s.countsToFacets(counts.status),
+		AvailableStages:     s.countsToFacets(counts.stage),
+		AvailableInitiators: s.countsToFacets(counts.initiator),
+		AvailableCommittees: s.countsToFacets(counts.committee),
+		AvailableTags:       s.countsToFacets(counts.tag),
+		YearRange:           YearRange{Min: ranges.minYear, Max: ranges.maxYear},
+		DaysInStageRange:    searchRange{Min: ranges.minDays, Max: ranges.maxDays},
+	}
 }
 
 // countsToFacets converts count map to sorted facet items
-func (s *SearchService) countsToFacets(counts map[string]int) []FacetItem {
-	var items []FacetItem
+func (*SearchService) countsToFacets(counts map[string]int) []facetItem {
+	var items []facetItem
 	
 	for value, count := range counts {
-		items = append(items, FacetItem{
+		items = append(items, facetItem{
 			Value: value,
 			Count: count,
 			Label: value,
@@ -544,7 +650,19 @@ func (s *SearchService) countsToFacets(counts map[string]int) []FacetItem {
 func ParseSearchCriteria(params map[string][]string) *SearchCriteria {
 	criteria := &SearchCriteria{}
 	
-	// Text search
+	parseTextFilters(params, criteria)
+	parseStatusFilters(params, criteria)
+	parseDateFilters(params, criteria)
+	parseNumericFilters(params, criteria)
+	parseVotingFilters(params, criteria)
+	parseMetadataFilters(params, criteria)
+	parseSortingAndPagination(params, criteria)
+	
+	return criteria
+}
+
+// parseTextFilters parses text-based search parameters
+func parseTextFilters(params map[string][]string, criteria *SearchCriteria) {
 	if query := getParam(params, "q"); query != "" {
 		criteria.Query = query
 	}
@@ -554,13 +672,17 @@ func ParseSearchCriteria(params map[string][]string) *SearchCriteria {
 	if initiator := getParam(params, "initiator"); initiator != "" {
 		criteria.InitiatorSearch = initiator
 	}
-	
-	// Status filters
+}
+
+// parseStatusFilters parses status-related parameters
+func parseStatusFilters(params map[string][]string, criteria *SearchCriteria) {
 	criteria.Statuses = getParams(params, "status")
 	criteria.DetailedStatuses = getParams(params, "detailed_status")
 	criteria.CurrentStages = getParams(params, "stage")
-	
-	// Date filters
+}
+
+// parseDateFilters parses date-related parameters
+func parseDateFilters(params map[string][]string, criteria *SearchCriteria) {
 	if dateFrom := getParam(params, "date_from"); dateFrom != "" {
 		if t, err := time.Parse("2006-01-02", dateFrom); err == nil {
 			criteria.DateFrom = &t
@@ -571,8 +693,10 @@ func ParseSearchCriteria(params map[string][]string) *SearchCriteria {
 			criteria.DateTo = &t
 		}
 	}
-	
-	// Numeric filters
+}
+
+// parseNumericFilters parses numeric range parameters
+func parseNumericFilters(params map[string][]string, criteria *SearchCriteria) {
 	if yearFrom := getIntParam(params, "year_from"); yearFrom != nil {
 		criteria.YearFrom = yearFrom
 	}
@@ -591,8 +715,10 @@ func ParseSearchCriteria(params map[string][]string) *SearchCriteria {
 	if daysMax := getIntParam(params, "days_max"); daysMax != nil {
 		criteria.DaysInStageMax = daysMax
 	}
-	
-	// Voting filters
+}
+
+// parseVotingFilters parses voting-related parameters
+func parseVotingFilters(params map[string][]string, criteria *SearchCriteria) {
 	if hasSeimVotes := getBoolParam(params, "has_sejm_votes"); hasSeimVotes != nil {
 		criteria.HasSejmVotes = hasSeimVotes
 	}
@@ -602,13 +728,17 @@ func ParseSearchCriteria(params map[string][]string) *SearchCriteria {
 	if votingResult := getParam(params, "voting_result"); votingResult != "" {
 		criteria.VotingResult = votingResult
 	}
-	
-	// Other filters
+}
+
+// parseMetadataFilters parses metadata-related parameters
+func parseMetadataFilters(params map[string][]string, criteria *SearchCriteria) {
 	criteria.CommitteeCodes = getParams(params, "committee")
 	criteria.Tags = getParams(params, "tag")
 	criteria.InitiatorTypes = getParams(params, "initiator_type")
-	
-	// Sorting and pagination
+}
+
+// parseSortingAndPagination parses sorting and pagination parameters
+func parseSortingAndPagination(params map[string][]string, criteria *SearchCriteria) {
 	if sortBy := getParam(params, "sort"); sortBy != "" {
 		criteria.SortBy = sortBy
 	}
@@ -621,8 +751,6 @@ func ParseSearchCriteria(params map[string][]string) *SearchCriteria {
 	if offset := getIntParam(params, "offset"); offset != nil {
 		criteria.Offset = *offset
 	}
-	
-	return criteria
 }
 
 // Helper functions for parameter parsing
@@ -660,7 +788,13 @@ func getBoolParam(params map[string][]string, key string) *bool {
 
 // GetSearchSuggestions provides auto-complete suggestions for search
 func (s *SearchService) GetSearchSuggestions(ctx context.Context, query string, field string) ([]string, error) {
-	// Get recent acts to extract suggestions from
+	allActs := s.getRecentActs(ctx)
+	suggestions := s.extractSuggestions(allActs, query, field)
+	return s.formatSuggestions(suggestions), nil
+}
+
+// getRecentActs retrieves acts from recent years
+func (s *SearchService) getRecentActs(ctx context.Context) []sejm.EnhancedAct {
 	currentYear := time.Now().Year()
 	var allActs []sejm.EnhancedAct
 	
@@ -672,30 +806,47 @@ func (s *SearchService) GetSearchSuggestions(ctx context.Context, query string, 
 		allActs = append(allActs, acts...)
 	}
 	
+	return allActs
+}
+
+// extractSuggestions extracts matching field values from acts
+func (*SearchService) extractSuggestions(acts []sejm.EnhancedAct, query, field string) map[string]bool {
 	suggestions := make(map[string]bool)
-	query = strings.ToLower(query)
+	queryLower := strings.ToLower(query)
 	
-	for _, act := range allActs {
-		var fieldValue string
-		switch field {
-		case "title":
-			fieldValue = act.Title
-		case "initiator":
-			fieldValue = act.InitiatorType
-		case "stage":
-			fieldValue = act.CurrentStage
-		case "committee":
-			fieldValue = act.CommitteeCode
-		default:
-			continue
-		}
-		
-		if fieldValue != "" && strings.Contains(strings.ToLower(fieldValue), query) {
+	for _, act := range acts {
+		fieldValue := getFieldValue(&act, field)
+		if shouldIncludeSuggestion(fieldValue, queryLower) {
 			suggestions[fieldValue] = true
 		}
 	}
 	
-	// Convert to sorted slice
+	return suggestions
+}
+
+// getFieldValue extracts the specified field value from an act
+func getFieldValue(act *sejm.EnhancedAct, field string) string {
+	switch field {
+	case "title":
+		return act.Title
+	case "initiator":
+		return act.InitiatorType
+	case "stage":
+		return act.CurrentStage
+	case "committee":
+		return act.CommitteeCode
+	default:
+		return ""
+	}
+}
+
+// shouldIncludeSuggestion determines if a field value should be included as suggestion
+func shouldIncludeSuggestion(fieldValue, queryLower string) bool {
+	return fieldValue != "" && strings.Contains(strings.ToLower(fieldValue), queryLower)
+}
+
+// formatSuggestions converts suggestion map to sorted, limited slice
+func (*SearchService) formatSuggestions(suggestions map[string]bool) []string {
 	var result []string
 	for suggestion := range suggestions {
 		result = append(result, suggestion)
@@ -703,10 +854,9 @@ func (s *SearchService) GetSearchSuggestions(ctx context.Context, query string, 
 	
 	sort.Strings(result)
 	
-	// Limit to top 10 suggestions
 	if len(result) > 10 {
 		result = result[:10]
 	}
 	
-	return result, nil
+	return result
 }

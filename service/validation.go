@@ -11,8 +11,9 @@ import (
 )
 
 // ValidationLevel represents the severity of validation issues
-type ValidationLevel string
+type ValidationLevel = string
 
+// Validation severity levels
 const (
 	ValidationLevelError   ValidationLevel = "error"   // Critical issues that must be fixed
 	ValidationLevelWarning ValidationLevel = "warning" // Issues that should be reviewed
@@ -24,7 +25,7 @@ type ValidationIssue struct {
 	Level       ValidationLevel `json:"level"`
 	Field       string          `json:"field"`
 	Message     string          `json:"message"`
-	Value       interface{}     `json:"value,omitempty"`
+	Value       any             `json:"value,omitempty"`
 	Suggestion  string          `json:"suggestion,omitempty"`
 	Code        string          `json:"code"`
 }
@@ -33,12 +34,12 @@ type ValidationIssue struct {
 type ValidationResult struct {
 	IsValid    bool               `json:"is_valid"`
 	Issues     []ValidationIssue  `json:"issues"`
-	Summary    ValidationSummary  `json:"summary"`
+	Summary    validationSummary  `json:"summary"`
 	ValidatedAt time.Time         `json:"validated_at"`
 }
 
-// ValidationSummary provides a summary of validation results
-type ValidationSummary struct {
+// validationSummary provides a summary of validation results
+type validationSummary struct {
 	TotalIssues   int `json:"total_issues"`
 	ErrorCount    int `json:"error_count"`
 	WarningCount  int `json:"warning_count"`
@@ -47,8 +48,8 @@ type ValidationSummary struct {
 	TotalChecks   int `json:"total_checks"`
 }
 
-// ValidationConfig contains configuration for validation rules
-type ValidationConfig struct {
+// validationConfig contains configuration for validation rules
+type validationConfig struct {
 	// Strictness levels
 	EnableStrictValidation  bool
 	RequireAllFields       bool
@@ -75,14 +76,19 @@ type ValidationRule interface {
 
 // DataValidationService provides comprehensive data validation
 type DataValidationService struct {
-	config *ValidationConfig
+	config *validationConfig
 	rules  []ValidationRule
 }
 
-// NewDataValidationService creates a new validation service
-func NewDataValidationService(config *ValidationConfig) *DataValidationService {
+// NewDataValidationService creates a new validation service with default config
+func NewDataValidationService() *DataValidationService {
+	return NewDataValidationServiceWithConfig(nil)
+}
+
+// NewDataValidationServiceWithConfig creates a new validation service with custom config
+func NewDataValidationServiceWithConfig(config *validationConfig) *DataValidationService {
 	if config == nil {
-		config = DefaultValidationConfig()
+		config = createDefaultValidationConfig()
 	}
 	
 	service := &DataValidationService{
@@ -96,9 +102,25 @@ func NewDataValidationService(config *ValidationConfig) *DataValidationService {
 	return service
 }
 
-// DefaultValidationConfig returns a sensible default configuration
-func DefaultValidationConfig() *ValidationConfig {
-	return &ValidationConfig{
+// DefaultValidationConfig returns a sensible default configuration (for external access)
+func DefaultValidationConfig() map[string]any {
+	config := createDefaultValidationConfig()
+	return map[string]any{
+		"enable_strict_validation": config.EnableStrictValidation,
+		"require_all_fields":      config.RequireAllFields,
+		"validate_references":     config.ValidateReferences,
+		"check_data_consistency":  config.CheckDataConsistency,
+		"max_validation_time":     config.MaxValidationTime,
+		"enable_async_validation": config.EnableAsyncValidation,
+		"batch_validation_size":   config.BatchValidationSize,
+		"enabled_rules":           config.EnabledRules,
+		"disabled_rules":          config.DisabledRules,
+	}
+}
+
+// createDefaultValidationConfig returns a sensible default configuration
+func createDefaultValidationConfig() *validationConfig {
+	return &validationConfig{
 		EnableStrictValidation: false,
 		RequireAllFields:      false,
 		ValidateReferences:    true,
@@ -168,7 +190,10 @@ func (dvs *DataValidationService) ValidateAct(ctx context.Context, act *sejm.Enh
 }
 
 // ValidateActBatch validates multiple acts in a batch
-func (dvs *DataValidationService) ValidateActBatch(ctx context.Context, acts []sejm.EnhancedAct) map[string]*ValidationResult {
+func (dvs *DataValidationService) ValidateActBatch(
+	ctx context.Context, 
+	acts []sejm.EnhancedAct,
+) map[string]*ValidationResult {
 	results := make(map[string]*ValidationResult)
 	
 	// Process in configurable batch sizes
@@ -206,29 +231,41 @@ func (dvs *DataValidationService) registerDefaultRules() {
 
 // isRuleEnabled checks if a validation rule is enabled
 func (dvs *DataValidationService) isRuleEnabled(ruleName string) bool {
-	// Check if explicitly disabled
-	for _, disabled := range dvs.config.DisabledRules {
-		if disabled == ruleName {
-			return false
-		}
-	}
-	
-	// Check if explicitly enabled (if EnabledRules is specified)
-	if len(dvs.config.EnabledRules) > 0 {
-		for _, enabled := range dvs.config.EnabledRules {
-			if enabled == ruleName {
-				return true
-			}
-		}
+	if dvs.isRuleDisabled(ruleName) {
 		return false
 	}
 	
-	return true
+	return dvs.isRuleInEnabledList(ruleName)
+}
+
+func (dvs *DataValidationService) isRuleDisabled(ruleName string) bool {
+	for _, disabled := range dvs.config.DisabledRules {
+		if disabled == ruleName {
+			return true
+		}
+	}
+	return false
+}
+
+func (dvs *DataValidationService) isRuleInEnabledList(ruleName string) bool {
+	if len(dvs.config.EnabledRules) == 0 {
+		return true
+	}
+	
+	for _, enabled := range dvs.config.EnabledRules {
+		if enabled == ruleName {
+			return true
+		}
+	}
+	return false
 }
 
 // calculateSummary calculates validation summary statistics
-func (dvs *DataValidationService) calculateSummary(issues []ValidationIssue, totalChecks, passedChecks int) ValidationSummary {
-	summary := ValidationSummary{
+func (*DataValidationService) calculateSummary(
+	issues []ValidationIssue, 
+	totalChecks, passedChecks int,
+) validationSummary {
+	summary := validationSummary{
 		TotalIssues:  len(issues),
 		TotalChecks:  totalChecks,
 		PassedChecks: passedChecks,
@@ -248,23 +285,26 @@ func (dvs *DataValidationService) calculateSummary(issues []ValidationIssue, tot
 	return summary
 }
 
-// BasicFieldsRule validates that required basic fields are present and properly formatted.
-type BasicFieldsRule struct{}
+// basicFieldsRule validates that required basic fields are present and properly formatted.
+type basicFieldsRule struct{}
 
 // NewBasicFieldsRule creates a new BasicFieldsRule validator.
-func NewBasicFieldsRule() *BasicFieldsRule {
-	return &BasicFieldsRule{}
+func NewBasicFieldsRule() ValidationRule {
+	return &basicFieldsRule{}
 }
 
-func (_ *BasicFieldsRule) GetName() string {
+// GetName returns the name of the basic fields validation rule
+func (*basicFieldsRule) GetName() string {
 	return "basic_fields"
 }
 
-func (_ *BasicFieldsRule) GetDescription() string {
+// GetDescription returns the description of the basic fields validation rule
+func (*basicFieldsRule) GetDescription() string {
 	return "Validates that required basic fields are present and properly formatted"
 }
 
-func (_ *BasicFieldsRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+// Validate performs basic fields validation on an enhanced act
+func (*basicFieldsRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Validate ID format
@@ -332,32 +372,38 @@ func (_ *BasicFieldsRule) Validate(_ context.Context, act *sejm.EnhancedAct) []V
 	return issues
 }
 
-// StatusConsistencyRule validates consistency between basic status and detailed status.
-type StatusConsistencyRule struct{}
+// statusConsistencyRule validates consistency between basic status and detailed status.
+type statusConsistencyRule struct{}
 
 // NewStatusConsistencyRule creates a new StatusConsistencyRule validator.
-func NewStatusConsistencyRule() *StatusConsistencyRule {
-	return &StatusConsistencyRule{}
+func NewStatusConsistencyRule() ValidationRule {
+	return &statusConsistencyRule{}
 }
 
 // GetName returns the name of the status consistency validation rule
-func (*StatusConsistencyRule) GetName() string {
+func (*statusConsistencyRule) GetName() string {
 	return "status_consistency"
 }
 
 // GetDescription returns the description of the status consistency validation rule
-func (*StatusConsistencyRule) GetDescription() string {
+func (*statusConsistencyRule) GetDescription() string {
 	return "Validates consistency between basic status and detailed status"
 }
 
 // Validate performs status consistency validation on an enhanced act
-func (r *StatusConsistencyRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+func (r *statusConsistencyRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
-	// Check status consistency
+	r.checkBasicStatusConsistency(act, &issues)
+	r.checkStageStatusConsistency(act, &issues)
+	
+	return issues
+}
+
+func (*statusConsistencyRule) checkBasicStatusConsistency(act *sejm.EnhancedAct, issues *[]ValidationIssue) {
 	if act.Status == "obowiązujący" && !strings.Contains(act.DetailedStatus, "force") {
 		if act.DetailedStatus != "in_force" && act.DetailedStatus != "published" {
-			issues = append(issues, ValidationIssue{
+			*issues = append(*issues, ValidationIssue{
 				Level:      ValidationLevelWarning,
 				Field:      "DetailedStatus",
 				Message:    "Detailed status inconsistent with basic status",
@@ -367,19 +413,16 @@ func (r *StatusConsistencyRule) Validate(_ context.Context, act *sejm.EnhancedAc
 			})
 		}
 	}
-	
-	// Validate current stage matches detailed status
+}
+
+func (r *statusConsistencyRule) checkStageStatusConsistency(act *sejm.EnhancedAct, issues *[]ValidationIssue) {
 	if act.CurrentStage != "" && act.DetailedStatus != "" {
-		if !r.validateStageStatusMatch(act, &issues) {
-			// Stage mismatch was already handled by validateStageStatusMatch
-		}
+		r.validateStageStatusMatch(act, issues)
 	}
-	
-	return issues
 }
 
 // validateStageStatusMatch is a helper to validate stage-status consistency
-func (*StatusConsistencyRule) validateStageStatusMatch(act *sejm.EnhancedAct, issues *[]ValidationIssue) bool {
+func (*statusConsistencyRule) validateStageStatusMatch(act *sejm.EnhancedAct, issues *[]ValidationIssue) bool {
 	expectedStages := map[string][]string{
 		"submitted":      {"Wpłynął", "Submitted"},
 		"committee_work": {"Komisja", "Committee"},
@@ -408,26 +451,26 @@ func (*StatusConsistencyRule) validateStageStatusMatch(act *sejm.EnhancedAct, is
 	return false
 }
 
-// DateValidationRule validates date fields for logical consistency and reasonable ranges
-type DateValidationRule struct{}
+// dateValidationRule validates date fields for logical consistency and reasonable ranges
+type dateValidationRule struct{}
 
 // NewDateValidationRule creates a new DateValidationRule validator
-func NewDateValidationRule() *DateValidationRule {
-	return &DateValidationRule{}
+func NewDateValidationRule() ValidationRule {
+	return &dateValidationRule{}
 }
 
 // GetName returns the name of the date validation rule
-func (*DateValidationRule) GetName() string {
+func (*dateValidationRule) GetName() string {
 	return "date_validation"
 }
 
 // GetDescription returns the description of the date validation rule
-func (*DateValidationRule) GetDescription() string {
+func (*dateValidationRule) GetDescription() string {
 	return "Validates date fields for logical consistency and reasonable ranges"
 }
 
 // Validate performs date validation on an enhanced act
-func (*DateValidationRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+func (*dateValidationRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	now := time.Now()
@@ -479,26 +522,26 @@ func (*DateValidationRule) Validate(_ context.Context, act *sejm.EnhancedAct) []
 	return issues
 }
 
-// NumericRangesRule validates numeric fields are within reasonable ranges
-type NumericRangesRule struct{}
+// numericRangesRule validates numeric fields are within reasonable ranges
+type numericRangesRule struct{}
 
 // NewNumericRangesRule creates a new NumericRangesRule validator
-func NewNumericRangesRule() *NumericRangesRule {
-	return &NumericRangesRule{}
+func NewNumericRangesRule() ValidationRule {
+	return &numericRangesRule{}
 }
 
 // GetName returns the name of the numeric ranges validation rule
-func (*NumericRangesRule) GetName() string {
+func (*numericRangesRule) GetName() string {
 	return "numeric_ranges"
 }
 
 // GetDescription returns the description of the numeric ranges validation rule
-func (*NumericRangesRule) GetDescription() string {
+func (*numericRangesRule) GetDescription() string {
 	return "Validates numeric fields are within reasonable ranges"
 }
 
 // Validate performs numeric ranges validation on an enhanced act
-func (*NumericRangesRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+func (*numericRangesRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Validate voting counts
@@ -530,26 +573,26 @@ func (*NumericRangesRule) Validate(_ context.Context, act *sejm.EnhancedAct) []V
 	return issues
 }
 
-// TextQualityRule validates text fields for quality and completeness
-type TextQualityRule struct{}
+// textQualityRule validates text fields for quality and completeness
+type textQualityRule struct{}
 
 // NewTextQualityRule creates a new TextQualityRule validator
-func NewTextQualityRule() *TextQualityRule {
-	return &TextQualityRule{}
+func NewTextQualityRule() ValidationRule {
+	return &textQualityRule{}
 }
 
 // GetName returns the name of the text quality validation rule
-func (*TextQualityRule) GetName() string {
+func (*textQualityRule) GetName() string {
 	return "text_quality"
 }
 
 // GetDescription returns the description of the text quality validation rule
-func (*TextQualityRule) GetDescription() string {
+func (*textQualityRule) GetDescription() string {
 	return "Validates text fields for quality and completeness"
 }
 
 // Validate performs text quality validation on an enhanced act
-func (*TextQualityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+func (*textQualityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Check for placeholder or incomplete text
@@ -590,69 +633,70 @@ func (*TextQualityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []Val
 	return issues
 }
 
-// ReferenceIntegrityRule validates links and references for accessibility and format
-type ReferenceIntegrityRule struct{}
+// referenceIntegrityRule validates links and references for accessibility and format
+type referenceIntegrityRule struct{}
 
 // NewReferenceIntegrityRule creates a new ReferenceIntegrityRule validator
-func NewReferenceIntegrityRule() *ReferenceIntegrityRule {
-	return &ReferenceIntegrityRule{}
+func NewReferenceIntegrityRule() ValidationRule {
+	return &referenceIntegrityRule{}
 }
 
 // GetName returns the name of the reference integrity validation rule
-func (*ReferenceIntegrityRule) GetName() string {
+func (*referenceIntegrityRule) GetName() string {
 	return "reference_integrity"
 }
 
 // GetDescription returns the description of the reference integrity validation rule
-func (*ReferenceIntegrityRule) GetDescription() string {
+func (*referenceIntegrityRule) GetDescription() string {
 	return "Validates links and references for accessibility and format"
 }
 
 // Validate performs reference integrity validation on an enhanced act
-func (*ReferenceIntegrityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+func (r *referenceIntegrityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
-	// Validate RCL link format
-	if act.RCLLink != "" {
-		if !strings.HasPrefix(act.RCLLink, "http") {
-			issues = append(issues, ValidationIssue{
-				Level:      ValidationLevelWarning,
-				Field:      "RCLLink",
-				Message:    "RCL link should be a valid URL",
-				Value:      act.RCLLink,
-				Suggestion: "Ensure link starts with http:// or https://",
-				Code:       "INVALID_URL_FORMAT",
-			})
-		}
-	}
-	
-	// Validate process print number format
-	if act.ProcessPrintNumber != "" {
-		if !regexp.MustCompile(`^\d+$`).MatchString(act.ProcessPrintNumber) {
-			issues = append(issues, ValidationIssue{
-				Level:      ValidationLevelWarning,
-				Field:      "ProcessPrintNumber",
-				Message:    "Process print number should be numeric",
-				Value:      act.ProcessPrintNumber,
-				Code:       "INVALID_PRINT_NUMBER",
-			})
-		}
-	}
-	
-	// Validate address format
-	if act.Address != "" {
-		if !strings.HasPrefix(act.Address, "http") && !strings.Contains(act.Address, ".pdf") {
-			issues = append(issues, ValidationIssue{
-				Level:      ValidationLevelInfo,
-				Field:      "Address",
-				Message:    "Address may not be a valid document link",
-				Value:      act.Address,
-				Code:       "QUESTIONABLE_ADDRESS",
-			})
-		}
-	}
+	r.validateRCLLink(act, &issues)
+	r.validateProcessPrintNumber(act, &issues)
+	r.validateAddress(act, &issues)
 	
 	return issues
+}
+
+func (*referenceIntegrityRule) validateRCLLink(act *sejm.EnhancedAct, issues *[]ValidationIssue) {
+	if act.RCLLink != "" && !strings.HasPrefix(act.RCLLink, "http") {
+		*issues = append(*issues, ValidationIssue{
+			Level:      ValidationLevelWarning,
+			Field:      "RCLLink",
+			Message:    "RCL link should be a valid URL",
+			Value:      act.RCLLink,
+			Suggestion: "Ensure link starts with http:// or https://",
+			Code:       "INVALID_URL_FORMAT",
+		})
+	}
+}
+
+func (*referenceIntegrityRule) validateProcessPrintNumber(act *sejm.EnhancedAct, issues *[]ValidationIssue) {
+	if act.ProcessPrintNumber != "" && !regexp.MustCompile(`^\d+$`).MatchString(act.ProcessPrintNumber) {
+		*issues = append(*issues, ValidationIssue{
+			Level:      ValidationLevelWarning,
+			Field:      "ProcessPrintNumber",
+			Message:    "Process print number should be numeric",
+			Value:      act.ProcessPrintNumber,
+			Code:       "INVALID_PRINT_NUMBER",
+		})
+	}
+}
+
+func (*referenceIntegrityRule) validateAddress(act *sejm.EnhancedAct, issues *[]ValidationIssue) {
+	if act.Address != "" && !strings.HasPrefix(act.Address, "http") && !strings.Contains(act.Address, ".pdf") {
+		*issues = append(*issues, ValidationIssue{
+			Level:      ValidationLevelInfo,
+			Field:      "Address",
+			Message:    "Address may not be a valid document link",
+			Value:      act.Address,
+			Code:       "QUESTIONABLE_ADDRESS",
+		})
+	}
 }
 
 // GetValidationStats returns validation statistics

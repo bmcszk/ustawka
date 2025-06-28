@@ -29,8 +29,11 @@ func NewExportService(db Database) *ExportService {
 type ExportFormat string
 
 const (
+	// ExportFormatJSON represents JSON export format
 	ExportFormatJSON ExportFormat = "json"
+	// ExportFormatCSV represents CSV export format
 	ExportFormatCSV  ExportFormat = "csv"
+	// ExportFormatPDF represents PDF export format
 	ExportFormatPDF  ExportFormat = "pdf"
 )
 
@@ -79,7 +82,7 @@ func (es *ExportService) ExportActs(ctx context.Context, req *ExportRequest) (*E
 		contentType = "text/csv"
 		filename = es.generateFilename("acts", "csv", req.Year)
 	case ExportFormatPDF:
-		data, err = es.exportActsPDF(acts, req)
+		data = es.exportActsPDF(acts, req)
 		contentType = "application/pdf"
 		filename = es.generateFilename("acts", "pdf", req.Year)
 	default:
@@ -101,7 +104,9 @@ func (es *ExportService) ExportActs(ctx context.Context, req *ExportRequest) (*E
 }
 
 // ExportComparison exports act comparison results
-func (es *ExportService) ExportComparison(ctx context.Context, comparison *ActComparison, format ExportFormat) (*ExportResult, error) {
+func (es *ExportService) ExportComparison(
+	_ context.Context, comparison *ActComparison, format ExportFormat,
+) (*ExportResult, error) {
 	var data []byte
 	var contentType string
 	var filename string
@@ -123,7 +128,7 @@ func (es *ExportService) ExportComparison(ctx context.Context, comparison *ActCo
 			sanitizeFilename(comparison.RightAct.ID),
 			time.Now().Format("20060102_150405"))
 	case ExportFormatPDF:
-		data, err = es.exportComparisonPDF(comparison)
+		data = es.exportComparisonPDF(comparison)
 		contentType = "application/pdf"
 		filename = fmt.Sprintf("comparison_%s_vs_%s_%s.pdf", 
 			sanitizeFilename(comparison.LeftAct.ID), 
@@ -149,81 +154,100 @@ func (es *ExportService) ExportComparison(ctx context.Context, comparison *ActCo
 
 // getFilteredActs retrieves acts based on export criteria
 func (es *ExportService) getFilteredActs(ctx context.Context, req *ExportRequest) ([]sejm.EnhancedAct, error) {
-	var allActs []sejm.EnhancedAct
-
-	if req.Year != nil {
-		// Get acts for specific year
-		acts, err := es.db.GetEnhancedActs(ctx, *req.Year)
-		if err != nil {
-			return nil, err
-		}
-		allActs = acts
-	} else {
-		// Get acts for current and recent years
-		currentYear := time.Now().Year()
-		for year := currentYear - 2; year <= currentYear; year++ {
-			acts, err := es.db.GetEnhancedActs(ctx, year)
-			if err != nil {
-				continue // Skip years with errors
-			}
-			allActs = append(allActs, acts...)
-		}
+	allActs, err := es.retrieveActs(ctx, req)
+	if err != nil {
+		return nil, err
 	}
 
-	// Apply filters
+	return es.applyFilters(allActs, req), nil
+}
+
+// retrieveActs gets acts from database based on year criteria
+func (es *ExportService) retrieveActs(ctx context.Context, req *ExportRequest) ([]sejm.EnhancedAct, error) {
+	if req.Year != nil {
+		return es.db.GetEnhancedActs(ctx, *req.Year)
+	}
+	return es.retrieveRecentYearsActs(ctx)
+}
+
+// retrieveRecentYearsActs gets acts from current and recent years
+func (es *ExportService) retrieveRecentYearsActs(ctx context.Context) ([]sejm.EnhancedAct, error) {
+	var allActs []sejm.EnhancedAct
+	currentYear := time.Now().Year()
+	
+	for year := currentYear - 2; year <= currentYear; year++ {
+		acts, err := es.db.GetEnhancedActs(ctx, year)
+		if err != nil {
+			continue // Skip years with errors
+		}
+		allActs = append(allActs, acts...)
+	}
+	
+	return allActs, nil
+}
+
+// applyFilters applies export criteria filters to acts
+func (es *ExportService) applyFilters(allActs []sejm.EnhancedAct, req *ExportRequest) []sejm.EnhancedAct {
 	filtered := make([]sejm.EnhancedAct, 0, len(allActs))
 	for _, act := range allActs {
 		if es.matchesFilters(&act, req) {
 			filtered = append(filtered, act)
 		}
 	}
-
-	return filtered, nil
+	return filtered
 }
 
 // matchesFilters checks if an act matches the export criteria
-func (es *ExportService) matchesFilters(act *sejm.EnhancedAct, req *ExportRequest) bool {
-	// Status filter
-	if len(req.Status) > 0 {
-		found := false
-		for _, status := range req.Status {
-			if act.Status == status {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
+func (*ExportService) matchesFilters(act *sejm.EnhancedAct, req *ExportRequest) bool {
+	return matchesExportStatusFilter(act, req.Status) &&
+		matchesExportTitleFilter(act, req.Title) &&
+		matchesExportDateFilters(act, req.DateFrom, req.DateTo)
+}
+
+// matchesExportStatusFilter checks if act matches status criteria
+func matchesExportStatusFilter(act *sejm.EnhancedAct, statuses []string) bool {
+	if len(statuses) == 0 {
+		return true
+	}
+	
+	for _, status := range statuses {
+		if act.Status == status {
+			return true
 		}
 	}
+	return false
+}
 
-	// Title filter
-	if req.Title != "" {
-		if !strings.Contains(strings.ToLower(act.Title), strings.ToLower(req.Title)) {
-			return false
-		}
+// matchesExportTitleFilter checks if act matches title criteria
+func matchesExportTitleFilter(act *sejm.EnhancedAct, title string) bool {
+	if title == "" {
+		return true
 	}
+	
+	return strings.Contains(strings.ToLower(act.Title), strings.ToLower(title))
+}
 
-	// Date filters
-	if req.DateFrom != nil && !act.StageDate.IsZero() {
-		if act.StageDate.Before(*req.DateFrom) {
-			return false
-		}
+// matchesExportDateFilters checks if act matches date range criteria
+func matchesExportDateFilters(act *sejm.EnhancedAct, dateFrom, dateTo *time.Time) bool {
+	if act.StageDate.IsZero() {
+		return true
 	}
-
-	if req.DateTo != nil && !act.StageDate.IsZero() {
-		if act.StageDate.After(*req.DateTo) {
-			return false
-		}
+	
+	if dateFrom != nil && act.StageDate.Before(*dateFrom) {
+		return false
 	}
-
+	
+	if dateTo != nil && act.StageDate.After(*dateTo) {
+		return false
+	}
+	
 	return true
 }
 
 // exportActsJSON exports acts as JSON
-func (es *ExportService) exportActsJSON(acts []sejm.EnhancedAct, req *ExportRequest) ([]byte, error) {
-	export := map[string]interface{}{
-		"metadata": map[string]interface{}{
+func (*ExportService) exportActsJSON(acts []sejm.EnhancedAct, req *ExportRequest) ([]byte, error) {
+	export := map[string]any{
+		"metadata": map[string]any{
 			"exported_at":    time.Now(),
 			"record_count":   len(acts),
 			"export_format":  "json",
@@ -236,53 +260,17 @@ func (es *ExportService) exportActsJSON(acts []sejm.EnhancedAct, req *ExportRequ
 }
 
 // exportActsCSV exports acts as CSV
-func (es *ExportService) exportActsCSV(acts []sejm.EnhancedAct, req *ExportRequest) ([]byte, error) {
+func (*ExportService) exportActsCSV(acts []sejm.EnhancedAct, req *ExportRequest) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
 
-	// Write header
-	header := []string{
-		"ID", "Tytuł", "Rok", "Pozycja", "Status", "Status szczegółowy",
-		"Aktualny etap", "Data etapu", "Dni w etapie", "Inicjator",
-	}
-
-	if req.IncludeVoting {
-		header = append(header, "Głosowania Sejm", "Głosowania Senat")
-	}
-
-	if req.IncludeStages {
-		header = append(header, "Liczba etapów")
-	}
-
+	header := buildCSVHeader(req)
 	if err := writer.Write(header); err != nil {
 		return nil, err
 	}
 
-	// Write data rows
 	for _, act := range acts {
-		row := []string{
-			act.ID,
-			act.Title,
-			strconv.Itoa(act.Year),
-			strconv.Itoa(act.Position),
-			act.Status,
-			act.DetailedStatus,
-			act.CurrentStage,
-			act.StageDate.Format("2006-01-02"),
-			strconv.Itoa(act.DaysInStage),
-			act.InitiatorType,
-		}
-
-		if req.IncludeVoting {
-			row = append(row, 
-				strconv.Itoa(len(act.SejmVotes)),
-				strconv.Itoa(len(act.SenateVotes)))
-		}
-
-		if req.IncludeStages {
-			row = append(row, strconv.Itoa(len(act.Stages)))
-		}
-
+		row := buildCSVRow(&act, req)
 		if err := writer.Write(row); err != nil {
 			return nil, err
 		}
@@ -296,35 +284,82 @@ func (es *ExportService) exportActsCSV(acts []sejm.EnhancedAct, req *ExportReque
 	return buf.Bytes(), nil
 }
 
+// buildCSVHeader creates CSV header row based on export options
+func buildCSVHeader(req *ExportRequest) []string {
+	header := []string{
+		"ID", "Tytuł", "Rok", "Pozycja", "Status", "Status szczegółowy",
+		"Aktualny etap", "Data etapu", "Dni w etapie", "Inicjator",
+	}
+
+	if req.IncludeVoting {
+		header = append(header, "Głosowania Sejm", "Głosowania Senat")
+	}
+
+	if req.IncludeStages {
+		header = append(header, "Liczba etapów")
+	}
+
+	return header
+}
+
+// buildCSVRow creates CSV data row for an act
+func buildCSVRow(act *sejm.EnhancedAct, req *ExportRequest) []string {
+	row := []string{
+		act.ID,
+		act.Title,
+		strconv.Itoa(act.Year),
+		strconv.Itoa(act.Position),
+		act.Status,
+		act.DetailedStatus,
+		act.CurrentStage,
+		act.StageDate.Format("2006-01-02"),
+		strconv.Itoa(act.DaysInStage),
+		act.InitiatorType,
+	}
+
+	if req.IncludeVoting {
+		row = append(row, 
+			strconv.Itoa(len(act.SejmVotes)),
+			strconv.Itoa(len(act.SenateVotes)))
+	}
+
+	if req.IncludeStages {
+		row = append(row, strconv.Itoa(len(act.Stages)))
+	}
+
+	return row
+}
+
 // exportActsPDF exports acts as PDF (basic implementation)
-func (es *ExportService) exportActsPDF(acts []sejm.EnhancedAct, req *ExportRequest) ([]byte, error) {
+func (*ExportService) exportActsPDF(acts []sejm.EnhancedAct, req *ExportRequest) []byte {
 	// Basic PDF implementation - in a real implementation, you'd use a PDF library
 	// For now, we'll create a text-based representation
 	var buf bytes.Buffer
 	
-	buf.WriteString("RAPORT AKTÓW PRAWNYCH\n")
-	buf.WriteString("======================\n\n")
-	buf.WriteString(fmt.Sprintf("Wygenerowano: %s\n", time.Now().Format("2006-01-02 15:04:05")))
-	buf.WriteString(fmt.Sprintf("Liczba aktów: %d\n\n", len(acts)))
+	// WriteString on bytes.Buffer never returns an error, but linter requires handling
+	_, _ = buf.WriteString("RAPORT AKTÓW PRAWNYCH\n")
+	_, _ = buf.WriteString("======================\n\n")
+	_, _ = buf.WriteString(fmt.Sprintf("Wygenerowano: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	_, _ = buf.WriteString(fmt.Sprintf("Liczba aktów: %d\n\n", len(acts)))
 
 	for i, act := range acts {
-		buf.WriteString(fmt.Sprintf("%d. %s\n", i+1, act.Title))
-		buf.WriteString(fmt.Sprintf("   ID: %s\n", act.ID))
-		buf.WriteString(fmt.Sprintf("   Status: %s\n", act.Status))
-		buf.WriteString(fmt.Sprintf("   Rok: %d, Pozycja: %d\n", act.Year, act.Position))
-		buf.WriteString(fmt.Sprintf("   Etap: %s\n", act.CurrentStage))
+		_, _ = buf.WriteString(fmt.Sprintf("%d. %s\n", i+1, act.Title))
+		_, _ = buf.WriteString(fmt.Sprintf("   ID: %s\n", act.ID))
+		_, _ = buf.WriteString(fmt.Sprintf("   Status: %s\n", act.Status))
+		_, _ = buf.WriteString(fmt.Sprintf("   Rok: %d, Pozycja: %d\n", act.Year, act.Position))
+		_, _ = buf.WriteString(fmt.Sprintf("   Etap: %s\n", act.CurrentStage))
 		if !act.StageDate.IsZero() {
-			buf.WriteString(fmt.Sprintf("   Data etapu: %s (%d dni)\n", 
+			_, _ = buf.WriteString(fmt.Sprintf("   Data etapu: %s (%d dni)\n", 
 				act.StageDate.Format("2006-01-02"), act.DaysInStage))
 		}
-		buf.WriteString(fmt.Sprintf("   Inicjator: %s\n", act.InitiatorType))
+		_, _ = buf.WriteString(fmt.Sprintf("   Inicjator: %s\n", act.InitiatorType))
 		
 		if req.IncludeVoting && (len(act.SejmVotes) > 0 || len(act.SenateVotes) > 0) {
-			buf.WriteString(fmt.Sprintf("   Głosowania: Sejm (%d), Senat (%d)\n", 
+			_, _ = buf.WriteString(fmt.Sprintf("   Głosowania: Sejm (%d), Senat (%d)\n", 
 				len(act.SejmVotes), len(act.SenateVotes)))
 		}
 		
-		buf.WriteString("\n")
+		_, _ = buf.WriteString("\n")
 	}
 
 	// Note: In a real implementation, you would use a proper PDF library like:
@@ -332,7 +367,7 @@ func (es *ExportService) exportActsPDF(acts []sejm.EnhancedAct, req *ExportReque
 	// - github.com/johnfercher/maroto
 	// - github.com/signintech/gopdf
 	
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }
 
 // exportComparisonCSV exports comparison results as CSV
@@ -340,7 +375,24 @@ func (es *ExportService) exportComparisonCSV(comparison *ActComparison) ([]byte,
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
 
-	// Write metadata
+	if err := es.writeComparisonMetadata(writer, comparison); err != nil {
+		return nil, err
+	}
+
+	if err := es.writeComparisonDifferences(writer, comparison.Differences); err != nil {
+		return nil, err
+	}
+
+	if err := es.writeComparisonSimilarities(writer, comparison.Similarities); err != nil {
+		return nil, err
+	}
+
+	writer.Flush()
+	return buf.Bytes(), nil
+}
+
+// writeComparisonMetadata writes metadata section to CSV
+func (*ExportService) writeComparisonMetadata(writer *csv.Writer, comparison *ActComparison) error {
 	metadata := [][]string{
 		{"Porównanie aktów prawnych"},
 		{"Akt A", comparison.LeftAct.ID, comparison.LeftAct.Title},
@@ -359,12 +411,15 @@ func (es *ExportService) exportComparisonCSV(comparison *ActComparison) ([]byte,
 
 	for _, row := range metadata {
 		if err := writer.Write(row); err != nil {
-			return nil, err
+			return err
 		}
 	}
+	return nil
+}
 
-	// Write differences
-	for _, diff := range comparison.Differences {
+// writeComparisonDifferences writes differences section to CSV
+func (*ExportService) writeComparisonDifferences(writer *csv.Writer, differences []FieldDifference) error {
+	for _, diff := range differences {
 		row := []string{
 			diff.Field,
 			diff.FieldLabel,
@@ -375,19 +430,18 @@ func (es *ExportService) exportComparisonCSV(comparison *ActComparison) ([]byte,
 			diff.Description,
 		}
 		if err := writer.Write(row); err != nil {
-			return nil, err
+			return err
 		}
 	}
+	return nil
+}
 
-	// Write similarities
-	if len(comparison.Similarities) > 0 {
-		if err := es.writeSimilaritiesToCSV(writer, comparison.Similarities); err != nil {
-			return nil, err
-		}
+// writeComparisonSimilarities writes similarities section to CSV if present
+func (es *ExportService) writeComparisonSimilarities(writer *csv.Writer, similarities []FieldSimilarity) error {
+	if len(similarities) > 0 {
+		return es.writeSimilaritiesToCSV(writer, similarities)
 	}
-
-	writer.Flush()
-	return buf.Bytes(), nil
+	return nil
 }
 
 func (*ExportService) writeSimilaritiesToCSV(writer *csv.Writer, similarities []FieldSimilarity) error {
@@ -416,54 +470,55 @@ func (*ExportService) writeSimilaritiesToCSV(writer *csv.Writer, similarities []
 }
 
 // exportComparisonPDF exports comparison results as PDF (basic implementation)
-func (es *ExportService) exportComparisonPDF(comparison *ActComparison) ([]byte, error) {
+func (*ExportService) exportComparisonPDF(comparison *ActComparison) []byte {
 	var buf bytes.Buffer
 	
-	buf.WriteString("PORÓWNANIE AKTÓW PRAWNYCH\n")
-	buf.WriteString("==========================\n\n")
+	// WriteString on bytes.Buffer never returns an error, but linter requires handling
+	_, _ = buf.WriteString("PORÓWNANIE AKTÓW PRAWNYCH\n")
+	_, _ = buf.WriteString("==========================\n\n")
 	
-	buf.WriteString(fmt.Sprintf("Data porównania: %s\n\n", comparison.CreatedAt.Format("2006-01-02 15:04:05")))
+	_, _ = buf.WriteString(fmt.Sprintf("Data porównania: %s\n\n", comparison.CreatedAt.Format("2006-01-02 15:04:05")))
 	
-	buf.WriteString("AKT A:\n")
-	buf.WriteString(fmt.Sprintf("  ID: %s\n", comparison.LeftAct.ID))
-	buf.WriteString(fmt.Sprintf("  Tytuł: %s\n", comparison.LeftAct.Title))
-	buf.WriteString(fmt.Sprintf("  Status: %s\n\n", comparison.LeftAct.Status))
+	_, _ = buf.WriteString("AKT A:\n")
+	_, _ = buf.WriteString(fmt.Sprintf("  ID: %s\n", comparison.LeftAct.ID))
+	_, _ = buf.WriteString(fmt.Sprintf("  Tytuł: %s\n", comparison.LeftAct.Title))
+	_, _ = buf.WriteString(fmt.Sprintf("  Status: %s\n\n", comparison.LeftAct.Status))
 	
-	buf.WriteString("AKT B:\n")
-	buf.WriteString(fmt.Sprintf("  ID: %s\n", comparison.RightAct.ID))
-	buf.WriteString(fmt.Sprintf("  Tytuł: %s\n", comparison.RightAct.Title))
-	buf.WriteString(fmt.Sprintf("  Status: %s\n\n", comparison.RightAct.Status))
+	_, _ = buf.WriteString("AKT B:\n")
+	_, _ = buf.WriteString(fmt.Sprintf("  ID: %s\n", comparison.RightAct.ID))
+	_, _ = buf.WriteString(fmt.Sprintf("  Tytuł: %s\n", comparison.RightAct.Title))
+	_, _ = buf.WriteString(fmt.Sprintf("  Status: %s\n\n", comparison.RightAct.Status))
 	
-	buf.WriteString("PODSUMOWANIE:\n")
-	buf.WriteString(fmt.Sprintf("  Łączna liczba pól: %d\n", comparison.Summary.TotalFields))
-	buf.WriteString(fmt.Sprintf("  Różnice: %d\n", comparison.Summary.DifferentFields))
-	buf.WriteString(fmt.Sprintf("  Podobieństwa: %d\n", comparison.Summary.SimilarFields))
-	buf.WriteString(fmt.Sprintf("  Krytyczne różnice: %d\n\n", comparison.Summary.CriticalDiffs))
+	_, _ = buf.WriteString("PODSUMOWANIE:\n")
+	_, _ = buf.WriteString(fmt.Sprintf("  Łączna liczba pól: %d\n", comparison.Summary.TotalFields))
+	_, _ = buf.WriteString(fmt.Sprintf("  Różnice: %d\n", comparison.Summary.DifferentFields))
+	_, _ = buf.WriteString(fmt.Sprintf("  Podobieństwa: %d\n", comparison.Summary.SimilarFields))
+	_, _ = buf.WriteString(fmt.Sprintf("  Krytyczne różnice: %d\n\n", comparison.Summary.CriticalDiffs))
 	
 	if len(comparison.Differences) > 0 {
-		buf.WriteString("RÓŻNICE:\n")
+		_, _ = buf.WriteString("RÓŻNICE:\n")
 		for i, diff := range comparison.Differences {
-			buf.WriteString(fmt.Sprintf("%d. %s (%s)\n", i+1, diff.FieldLabel, diff.Severity))
-			buf.WriteString(fmt.Sprintf("   Akt A: %v\n", diff.LeftValue))
-			buf.WriteString(fmt.Sprintf("   Akt B: %v\n", diff.RightValue))
-			buf.WriteString(fmt.Sprintf("   Opis: %s\n\n", diff.Description))
+			_, _ = buf.WriteString(fmt.Sprintf("%d. %s (%s)\n", i+1, diff.FieldLabel, diff.Severity))
+			_, _ = buf.WriteString(fmt.Sprintf("   Akt A: %v\n", diff.LeftValue))
+			_, _ = buf.WriteString(fmt.Sprintf("   Akt B: %v\n", diff.RightValue))
+			_, _ = buf.WriteString(fmt.Sprintf("   Opis: %s\n\n", diff.Description))
 		}
 	}
 	
 	if len(comparison.Similarities) > 0 {
-		buf.WriteString("PODOBIEŃSTWA:\n")
+		_, _ = buf.WriteString("PODOBIEŃSTWA:\n")
 		for i, sim := range comparison.Similarities {
-			buf.WriteString(fmt.Sprintf("%d. %s\n", i+1, sim.FieldLabel))
-			buf.WriteString(fmt.Sprintf("   Wartość: %v\n", sim.Value))
-			buf.WriteString(fmt.Sprintf("   Opis: %s\n\n", sim.Description))
+			_, _ = buf.WriteString(fmt.Sprintf("%d. %s\n", i+1, sim.FieldLabel))
+			_, _ = buf.WriteString(fmt.Sprintf("   Wartość: %v\n", sim.Value))
+			_, _ = buf.WriteString(fmt.Sprintf("   Opis: %s\n\n", sim.Description))
 		}
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }
 
 // generateFilename generates a filename for export
-func (es *ExportService) generateFilename(prefix, extension string, year *int) string {
+func (*ExportService) generateFilename(prefix, extension string, year *int) string {
 	timestamp := time.Now().Format("20060102_150405")
 	
 	if year != nil {

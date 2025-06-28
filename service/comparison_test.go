@@ -241,7 +241,7 @@ func TestCompareActs_DiffSeverity(t *testing.T) {
 	for _, diff := range comparison.Differences {
 		if diff.Field == "status" {
 			foundCriticalStatusDiff = true
-			assert.Equal(t, service.DiffSeverityCritical, diff.Severity)
+			assert.Equal(t, "critical", diff.Severity)
 			break
 		}
 	}
@@ -453,7 +453,8 @@ func BenchmarkCompareActs(b *testing.B) {
 		SejmVotes:     []sejm.VotingRecord{{YesVotes: 250, NoVotes: 150}},
 	}
 	
-	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).Return([]sejm.EnhancedAct{leftAct, rightAct}, nil)
+	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.EnhancedAct{leftAct, rightAct}, nil)
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

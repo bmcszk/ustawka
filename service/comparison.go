@@ -23,13 +23,13 @@ type ActComparison struct {
 
 // FieldDifference represents a difference between two act fields
 type FieldDifference struct {
-	Field         string        `json:"field"`
-	FieldLabel    string        `json:"field_label"`
-	LeftValue     any           `json:"left_value"`
-	RightValue    any           `json:"right_value"`
-	DifferenceType DiffType     `json:"difference_type"`
-	Severity      DiffSeverity  `json:"severity"`
-	Description   string        `json:"description"`
+	Field         string `json:"field"`
+	FieldLabel    string `json:"field_label"`
+	LeftValue     any    `json:"left_value"`
+	RightValue    any    `json:"right_value"`
+	DifferenceType string `json:"difference_type"`
+	Severity      string `json:"severity"`
+	Description   string `json:"description"`
 }
 
 // FieldSimilarity represents a similarity between two act fields
@@ -50,24 +50,24 @@ type ComparisonSummary struct {
 	MinorDiffs       int `json:"minor_diffs"`
 }
 
-// DiffType represents the type of difference
-type DiffType string
+// diffType represents the type of difference (internal)
+type diffType string
 
 const (
-	DiffTypeValueChanged DiffType = "value_changed"
-	DiffTypeAdded        DiffType = "added"
-	DiffTypeRemoved      DiffType = "removed"
-	DiffTypeModified     DiffType = "modified"
+	diffTypeValueChanged diffType = "value_changed"
+	diffTypeAdded        diffType = "added"
+	diffTypeRemoved      diffType = "removed"
+	diffTypeModified     diffType = "modified"
 )
 
-// DiffSeverity represents the importance of a difference
-type DiffSeverity string
+// diffSeverity represents the importance of a difference (internal)
+type diffSeverity string
 
 const (
-	DiffSeverityCritical DiffSeverity = "critical"
-	DiffSeverityMajor    DiffSeverity = "major"
-	DiffSeverityMinor    DiffSeverity = "minor"
-	DiffSeverityInfo     DiffSeverity = "info"
+	diffSeverityCritical diffSeverity = "critical"
+	diffSeverityMajor    diffSeverity = "major"
+	diffSeverityMinor    diffSeverity = "minor"
+	diffSeverityInfo     diffSeverity = "info"
 )
 
 // ComparisonService provides act comparison functionality
@@ -135,36 +135,59 @@ func (cs *ComparisonService) getActByID(ctx context.Context, id string) (*sejm.E
 }
 
 // getEnhancedActDetails retrieves enhanced act details by year and position
-func (cs *ComparisonService) getEnhancedActDetails(ctx context.Context, year, position string) (*sejm.EnhancedAct, error) {
+func (*ComparisonService) getEnhancedActDetails(_ context.Context, year, position string) (*sejm.EnhancedAct, error) {
 	// This would use the same logic as the existing act service
 	// For now, return a basic implementation
 	return nil, fmt.Errorf("enhanced act details not found for %s/%s", year, position)
 }
 
 // getBasicActAsEnhanced converts basic act to enhanced act format
-func (cs *ComparisonService) getBasicActAsEnhanced(ctx context.Context, year, position string) (*sejm.EnhancedAct, error) {
+func (*ComparisonService) getBasicActAsEnhanced(_ context.Context, year, position string) (*sejm.EnhancedAct, error) {
 	// This would convert basic act data to enhanced format
 	return nil, fmt.Errorf("basic act not found for %s/%s", year, position)
 }
 
 // searchActByDirectID searches for an act by direct ID across all data
 func (cs *ComparisonService) searchActByDirectID(ctx context.Context, id string) (*sejm.EnhancedAct, error) {
-	// Search across multiple years for the act
 	currentYear := time.Now().Year()
-	for year := currentYear - 5; year <= currentYear+1; year++ {
-		acts, err := cs.db.GetEnhancedActs(ctx, year)
-		if err != nil {
-			continue
-		}
-		
-		for _, act := range acts {
-			if act.ID == id {
-				return &act, nil
-			}
+	yearRange := cs.getSearchYearRange(currentYear)
+	
+	for year := yearRange.start; year <= yearRange.end; year++ {
+		if act := cs.searchActInYear(ctx, id, year); act != nil {
+			return act, nil
 		}
 	}
 	
 	return nil, fmt.Errorf("act not found with ID: %s", id)
+}
+
+// yearRange represents a range of years to search
+type yearRange struct {
+	start, end int
+}
+
+// getSearchYearRange returns the range of years to search for acts
+func (*ComparisonService) getSearchYearRange(currentYear int) yearRange {
+	return yearRange{
+		start: currentYear - 5,
+		end:   currentYear + 1,
+	}
+}
+
+// searchActInYear searches for an act in a specific year
+func (cs *ComparisonService) searchActInYear(ctx context.Context, id string, year int) *sejm.EnhancedAct {
+	acts, err := cs.db.GetEnhancedActs(ctx, year)
+	if err != nil {
+		return nil
+	}
+	
+	for _, act := range acts {
+		if act.ID == id {
+			return &act
+		}
+	}
+	
+	return nil
 }
 
 // findDifferences identifies all differences between two acts
@@ -190,7 +213,7 @@ func (cs *ComparisonService) findDifferences(left, right *sejm.EnhancedAct) []Fi
 }
 
 // compareBasicFields compares basic act information
-func (cs *ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) []FieldDifference {
+func (*ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) []FieldDifference {
 	var diffs []FieldDifference
 	
 	// Title comparison
@@ -200,8 +223,8 @@ func (cs *ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) [
 			FieldLabel:    "Tytuł",
 			LeftValue:     left.Title,
 			RightValue:    right.Title,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Tytuły aktów prawnych się różnią",
 		})
 	}
@@ -213,8 +236,8 @@ func (cs *ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) [
 			FieldLabel:    "Rok",
 			LeftValue:     left.Year,
 			RightValue:    right.Year,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Akty pochodzą z różnych lat",
 		})
 	}
@@ -226,8 +249,8 @@ func (cs *ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) [
 			FieldLabel:    "Pozycja",
 			LeftValue:     left.Position,
 			RightValue:    right.Position,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMinor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMinor),
 			Description:   "Różne pozycje w dzienniku ustaw",
 		})
 	}
@@ -239,8 +262,8 @@ func (cs *ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) [
 			FieldLabel:    "Inicjator",
 			LeftValue:     left.InitiatorType,
 			RightValue:    right.InitiatorType,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Różni inicjatorzy aktów prawnych",
 		})
 	}
@@ -249,7 +272,7 @@ func (cs *ComparisonService) compareBasicFields(left, right *sejm.EnhancedAct) [
 }
 
 // compareStatusFields compares status and stage information
-func (cs *ComparisonService) compareStatusFields(left, right *sejm.EnhancedAct) []FieldDifference {
+func (*ComparisonService) compareStatusFields(left, right *sejm.EnhancedAct) []FieldDifference {
 	var diffs []FieldDifference
 	
 	// Status comparison
@@ -259,8 +282,8 @@ func (cs *ComparisonService) compareStatusFields(left, right *sejm.EnhancedAct) 
 			FieldLabel:    "Status",
 			LeftValue:     left.Status,
 			RightValue:    right.Status,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityCritical,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityCritical),
 			Description:   "Różne statusy aktów prawnych",
 		})
 	}
@@ -272,8 +295,8 @@ func (cs *ComparisonService) compareStatusFields(left, right *sejm.EnhancedAct) 
 			FieldLabel:    "Status szczegółowy",
 			LeftValue:     left.DetailedStatus,
 			RightValue:    right.DetailedStatus,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Różne szczegółowe statusy",
 		})
 	}
@@ -285,17 +308,17 @@ func (cs *ComparisonService) compareStatusFields(left, right *sejm.EnhancedAct) 
 			FieldLabel:    "Aktualny etap",
 			LeftValue:     left.CurrentStage,
 			RightValue:    right.CurrentStage,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Akty znajdują się w różnych etapach procedury",
 		})
 	}
 	
 	// Days in stage comparison
 	if left.DaysInStage != right.DaysInStage {
-		severity := DiffSeverityMinor
+		severity := string(diffSeverityMinor)
 		if abs(left.DaysInStage-right.DaysInStage) > 30 {
-			severity = DiffSeverityMajor
+			severity = string(diffSeverityMajor)
 		}
 		
 		diffs = append(diffs, FieldDifference{
@@ -303,9 +326,10 @@ func (cs *ComparisonService) compareStatusFields(left, right *sejm.EnhancedAct) 
 			FieldLabel:    "Dni w etapie",
 			LeftValue:     left.DaysInStage,
 			RightValue:    right.DaysInStage,
-			DifferenceType: DiffTypeValueChanged,
+			DifferenceType: string(diffTypeValueChanged),
 			Severity:      severity,
-			Description:   fmt.Sprintf("Różnica w czasie trwania etapu: %d dni", abs(left.DaysInStage-right.DaysInStage)),
+			Description:   fmt.Sprintf("Różnica w czasie trwania etapu: %d dni", 
+				abs(left.DaysInStage-right.DaysInStage)),
 		})
 	}
 	
@@ -326,8 +350,8 @@ func (cs *ComparisonService) compareVotingFields(left, right *sejm.EnhancedAct) 
 			FieldLabel:    "Liczba głosowań w Sejmie",
 			LeftValue:     leftSejmVotes,
 			RightValue:    rightSejmVotes,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Różna liczba głosowań w Sejmie",
 		})
 	}
@@ -342,8 +366,8 @@ func (cs *ComparisonService) compareVotingFields(left, right *sejm.EnhancedAct) 
 			FieldLabel:    "Liczba głosowań w Senacie",
 			LeftValue:     leftSenateVotes,
 			RightValue:    rightSenateVotes,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMajor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMajor),
 			Description:   "Różna liczba głosowań w Senacie",
 		})
 	}
@@ -361,7 +385,9 @@ func (cs *ComparisonService) compareVotingFields(left, right *sejm.EnhancedAct) 
 }
 
 // compareVotingResults compares specific voting results
-func (cs *ComparisonService) compareVotingResults(leftVotes, rightVotes []sejm.VotingRecord, chamber string) []FieldDifference {
+func (*ComparisonService) compareVotingResults(
+	leftVotes, rightVotes []sejm.VotingRecord, chamber string,
+) []FieldDifference {
 	var diffs []FieldDifference
 	
 	// Compare most recent votes
@@ -376,8 +402,8 @@ func (cs *ComparisonService) compareVotingResults(leftVotes, rightVotes []sejm.V
 				FieldLabel:    fmt.Sprintf("Głosy za (%s)", chamber),
 				LeftValue:     leftVote.YesVotes,
 				RightValue:    rightVote.YesVotes,
-				DifferenceType: DiffTypeValueChanged,
-				Severity:      DiffSeverityMajor,
+				DifferenceType: string(diffTypeValueChanged),
+				Severity:      string(diffSeverityMajor),
 				Description:   fmt.Sprintf("Różna liczba głosów za w %s", chamber),
 			})
 		}
@@ -389,8 +415,8 @@ func (cs *ComparisonService) compareVotingResults(leftVotes, rightVotes []sejm.V
 				FieldLabel:    fmt.Sprintf("Głosy przeciw (%s)", chamber),
 				LeftValue:     leftVote.NoVotes,
 				RightValue:    rightVote.NoVotes,
-				DifferenceType: DiffTypeValueChanged,
-				Severity:      DiffSeverityMajor,
+				DifferenceType: string(diffTypeValueChanged),
+				Severity:      string(diffSeverityMajor),
 				Description:   fmt.Sprintf("Różna liczba głosów przeciw w %s", chamber),
 			})
 		}
@@ -400,16 +426,16 @@ func (cs *ComparisonService) compareVotingResults(leftVotes, rightVotes []sejm.V
 }
 
 // compareTimingFields compares timing-related information
-func (cs *ComparisonService) compareTimingFields(left, right *sejm.EnhancedAct) []FieldDifference {
+func (*ComparisonService) compareTimingFields(left, right *sejm.EnhancedAct) []FieldDifference {
 	var diffs []FieldDifference
 	
 	// Stage date comparison
 	if !left.StageDate.IsZero() && !right.StageDate.IsZero() {
 		if !left.StageDate.Equal(right.StageDate) {
 			daysDiff := int(left.StageDate.Sub(right.StageDate).Hours() / 24)
-			severity := DiffSeverityMinor
+			severity := string(diffSeverityMinor)
 			if abs(daysDiff) > 30 {
-				severity = DiffSeverityMajor
+				severity = string(diffSeverityMajor)
 			}
 			
 			diffs = append(diffs, FieldDifference{
@@ -417,7 +443,7 @@ func (cs *ComparisonService) compareTimingFields(left, right *sejm.EnhancedAct) 
 				FieldLabel:    "Data etapu",
 				LeftValue:     left.StageDate.Format("2006-01-02"),
 				RightValue:    right.StageDate.Format("2006-01-02"),
-				DifferenceType: DiffTypeValueChanged,
+				DifferenceType: string(diffTypeValueChanged),
 				Severity:      severity,
 				Description:   fmt.Sprintf("Różnica w dacie etapu: %d dni", daysDiff),
 			})
@@ -428,7 +454,7 @@ func (cs *ComparisonService) compareTimingFields(left, right *sejm.EnhancedAct) 
 }
 
 // compareMetadataFields compares metadata and reference information
-func (cs *ComparisonService) compareMetadataFields(left, right *sejm.EnhancedAct) []FieldDifference {
+func (*ComparisonService) compareMetadataFields(left, right *sejm.EnhancedAct) []FieldDifference {
 	var diffs []FieldDifference
 	
 	// Committee comparison
@@ -438,8 +464,8 @@ func (cs *ComparisonService) compareMetadataFields(left, right *sejm.EnhancedAct
 			FieldLabel:    "Kod komisji",
 			LeftValue:     left.CommitteeCode,
 			RightValue:    right.CommitteeCode,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityMinor,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityMinor),
 			Description:   "Różne komisje odpowiedzialne za akty",
 		})
 	}
@@ -454,8 +480,8 @@ func (cs *ComparisonService) compareMetadataFields(left, right *sejm.EnhancedAct
 			FieldLabel:    "Tagi",
 			LeftValue:     leftTags,
 			RightValue:    rightTags,
-			DifferenceType: DiffTypeValueChanged,
-			Severity:      DiffSeverityInfo,
+			DifferenceType: string(diffTypeValueChanged),
+			Severity:      string(diffSeverityInfo),
 			Description:   "Różne tagi kategoryzacyjne",
 		})
 	}
@@ -464,7 +490,7 @@ func (cs *ComparisonService) compareMetadataFields(left, right *sejm.EnhancedAct
 }
 
 // findSimilarities identifies similarities between two acts
-func (cs *ComparisonService) findSimilarities(left, right *sejm.EnhancedAct) []FieldSimilarity {
+func (*ComparisonService) findSimilarities(left, right *sejm.EnhancedAct) []FieldSimilarity {
 	var similarities []FieldSimilarity
 	
 	// Same year
@@ -521,7 +547,9 @@ func (cs *ComparisonService) findSimilarities(left, right *sejm.EnhancedAct) []F
 }
 
 // generateSummary creates a summary of the comparison
-func (cs *ComparisonService) generateSummary(differences []FieldDifference, similarities []FieldSimilarity) ComparisonSummary {
+func (*ComparisonService) generateSummary(
+	differences []FieldDifference, similarities []FieldSimilarity,
+) ComparisonSummary {
 	summary := ComparisonSummary{
 		TotalFields:     len(differences) + len(similarities),
 		DifferentFields: len(differences),
@@ -531,11 +559,11 @@ func (cs *ComparisonService) generateSummary(differences []FieldDifference, simi
 	// Count differences by severity
 	for _, diff := range differences {
 		switch diff.Severity {
-		case DiffSeverityCritical:
+		case string(diffSeverityCritical):
 			summary.CriticalDiffs++
-		case DiffSeverityMajor:
+		case string(diffSeverityMajor):
 			summary.MajorDiffs++
-		case DiffSeverityMinor:
+		case string(diffSeverityMinor):
 			summary.MinorDiffs++
 		}
 	}
@@ -544,52 +572,82 @@ func (cs *ComparisonService) generateSummary(differences []FieldDifference, simi
 }
 
 // GetComparisonSuggestions returns suggested acts for comparison
-func (cs *ComparisonService) GetComparisonSuggestions(ctx context.Context, actID string) ([]sejm.EnhancedAct, error) {
-	// Get the base act
+func (cs *ComparisonService) GetComparisonSuggestions(
+	ctx context.Context, actID string,
+) ([]sejm.EnhancedAct, error) {
 	baseAct, err := cs.getActByID(ctx, actID)
 	if err != nil {
 		return nil, err
 	}
 	
-	// Find similar acts from the same year and related years
+	suggestions := cs.findSimilarActs(ctx, baseAct)
+	cs.sortSuggestionsByScore(baseAct, suggestions)
+	
+	return cs.limitSuggestions(suggestions), nil
+}
+
+// findSimilarActs finds acts similar to the base act across related years
+func (cs *ComparisonService) findSimilarActs(ctx context.Context, baseAct *sejm.EnhancedAct) []sejm.EnhancedAct {
 	var suggestions []sejm.EnhancedAct
 	
 	for year := baseAct.Year - 1; year <= baseAct.Year+1; year++ {
-		acts, err := cs.db.GetEnhancedActs(ctx, year)
-		if err != nil {
-			continue
-		}
-		
-		for _, act := range acts {
-			if act.ID == baseAct.ID {
-				continue // Skip the same act
-			}
-			
-			// Score similarity
-			score := cs.CalculateSimilarityScore(baseAct, &act)
-			if score > 0.3 { // Threshold for suggestions
-				suggestions = append(suggestions, act)
-			}
+		yearSuggestions := cs.findSimilarActsInYear(ctx, baseAct, year)
+		suggestions = append(suggestions, yearSuggestions...)
+	}
+	
+	return suggestions
+}
+
+// findSimilarActsInYear finds similar acts in a specific year
+func (cs *ComparisonService) findSimilarActsInYear(
+	ctx context.Context, baseAct *sejm.EnhancedAct, year int,
+) []sejm.EnhancedAct {
+	acts, err := cs.db.GetEnhancedActs(ctx, year)
+	if err != nil {
+		return nil
+	}
+	
+	var suggestions []sejm.EnhancedAct
+	for _, act := range acts {
+		if cs.shouldIncludeAsSuggestion(baseAct, &act) {
+			suggestions = append(suggestions, act)
 		}
 	}
 	
-	// Sort by similarity score (implement scoring logic)
+	return suggestions
+}
+
+// shouldIncludeAsSuggestion determines if an act should be included as a suggestion
+func (cs *ComparisonService) shouldIncludeAsSuggestion(baseAct, candidate *sejm.EnhancedAct) bool {
+	if candidate.ID == baseAct.ID {
+		return false // Skip the same act
+	}
+	
+	score := cs.CalculateSimilarityScore(baseAct, candidate)
+	return score > 0.3 // Threshold for suggestions
+}
+
+// sortSuggestionsByScore sorts suggestions by similarity score
+func (cs *ComparisonService) sortSuggestionsByScore(baseAct *sejm.EnhancedAct, suggestions []sejm.EnhancedAct) {
 	sort.Slice(suggestions, func(i, j int) bool {
 		scoreI := cs.CalculateSimilarityScore(baseAct, &suggestions[i])
 		scoreJ := cs.CalculateSimilarityScore(baseAct, &suggestions[j])
 		return scoreI > scoreJ
 	})
-	
-	// Limit to top 10 suggestions
+}
+
+// limitSuggestions limits suggestions to top 10
+func (*ComparisonService) limitSuggestions(suggestions []sejm.EnhancedAct) []sejm.EnhancedAct {
 	if len(suggestions) > 10 {
-		suggestions = suggestions[:10]
+		return suggestions[:10]
 	}
-	
-	return suggestions, nil
+	return suggestions
 }
 
 // CalculateSimilarityScore calculates a similarity score between two acts
-func (cs *ComparisonService) CalculateSimilarityScore(base, candidate *sejm.EnhancedAct) float64 {
+func (cs *ComparisonService) CalculateSimilarityScore(
+	base, candidate *sejm.EnhancedAct,
+) float64 {
 	score := 0.0
 	
 	// Same initiator type
@@ -615,25 +673,44 @@ func (cs *ComparisonService) CalculateSimilarityScore(base, candidate *sejm.Enha
 }
 
 // CalculateTextSimilarity calculates basic text similarity
-func (cs *ComparisonService) CalculateTextSimilarity(text1, text2 string) float64 {
-	words1 := strings.Fields(strings.ToLower(text1))
-	words2 := strings.Fields(strings.ToLower(text2))
+func (*ComparisonService) CalculateTextSimilarity(text1, text2 string) float64 {
+	words1 := extractSignificantWords(text1)
+	words2 := extractSignificantWords(text2)
 	
 	if len(words1) == 0 || len(words2) == 0 {
 		return 0.0
 	}
 	
+	matches := countWordMatches(words1, words2)
+	return float64(matches) / float64(maxInt(len(words1), len(words2)))
+}
+
+// extractSignificantWords extracts words longer than 3 characters
+func extractSignificantWords(text string) []string {
+	allWords := strings.Fields(strings.ToLower(text))
+	var significantWords []string
+	
+	for _, word := range allWords {
+		if len(word) > 3 {
+			significantWords = append(significantWords, word)
+		}
+	}
+	
+	return significantWords
+}
+
+// countWordMatches counts matching words between two slices
+func countWordMatches(words1, words2 []string) int {
 	matches := 0
 	for _, word1 := range words1 {
 		for _, word2 := range words2 {
-			if word1 == word2 && len(word1) > 3 { // Only count significant words
+			if word1 == word2 {
 				matches++
 				break
 			}
 		}
 	}
-	
-	return float64(matches) / float64(max(len(words1), len(words2)))
+	return matches
 }
 
 // Helper functions
@@ -644,7 +721,7 @@ func abs(x int) int {
 	return x
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

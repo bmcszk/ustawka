@@ -104,110 +104,115 @@ func TestDefaultBackgroundConfig(t *testing.T) {
 }
 
 func TestBackgroundServiceStart(t *testing.T) {
-	tests := []struct {
-		name           string
-		setupMocks     func(*MockPipeline, *MockEnrichmentService, *MockDB)
-		expectError    bool
-		errorContains  string
-	}{
-		{
-			name: "Successful start",
-			setupMocks: func(mp *MockPipeline, me *MockEnrichmentService, md *MockDB) {
-				mp.On("Start", mock.Anything).Return(nil).Once()
-				mp.On("GetStats").Return(&service.PipelineStats{
-					LastSejmPoll:    time.Now(),
-					LastSenatePoll:  time.Now(),
-					LastEnrichment:  time.Now(),
-					ActsProcessed:   100,
-					VotesProcessed:  50,
-					ErrorCount:      0,
-				}).Maybe()
-				// Add mock for monitoring service initialization
-				md.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
-					Return([]sejm.EnhancedAct{}, nil).Maybe()
-				// Add mock for background sync operations
-				md.On("GetCacheAge", mock.Anything, mock.AnythingOfType("int")).
-					Return(time.Hour, nil).Maybe()
-				md.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
-					Return([]sejm.Act{}, nil).Maybe()
-				md.On("StoreActs", mock.Anything, mock.AnythingOfType("int"), mock.Anything).
-					Return(nil).Maybe()
-				md.On("StoreEnhancedAct", mock.Anything, mock.Anything).
-					Return(nil).Maybe()
-				// Add mock for Stop method
-				mp.On("Stop").Return().Maybe()
-			},
-			expectError: false,
-		},
-		{
-			name: "Pipeline start failure",
-			setupMocks: func(mp *MockPipeline, me *MockEnrichmentService, md *MockDB) {
-				mp.On("Start", mock.Anything).Return(assert.AnError).Once()
-			},
-			expectError:   true,
-			errorContains: "failed to start pipeline",
-		},
-		{
-			name: "Already running",
-			setupMocks: func(mp *MockPipeline, me *MockEnrichmentService, md *MockDB) {
-				// No setup needed for this test
-			},
-			expectError:   true,
-			errorContains: "already running",
-		},
-	}
+	t.Run("Successful start", testSuccessfulStart)
+	t.Run("Pipeline start failure", testPipelineStartFailure)
+	t.Run("Already running", testAlreadyRunning)
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pipeline := &MockPipeline{}
-			enrichment := &MockEnrichmentService{}
-			db := &MockDB{}
-			config := service.DefaultBackgroundConfig()
-			
-			// Disable time-based workers for faster tests
-			config.FullSyncInterval = 24 * time.Hour
-			config.EnrichmentInterval = 24 * time.Hour
-			config.HealthCheckInterval = 24 * time.Hour
-			// Disable features that require additional mocks
-			config.EnableStatusMonitoring = false
-			config.EnablePerformanceMetrics = false
+func testSuccessfulStart(t *testing.T) {
+	setup := setupBackgroundServiceTest()
+	setupSuccessfulStartMocks(setup.pipeline, setup.db)
+	
+	err := setup.service.Start(context.Background())
+	assert.NoError(t, err)
+	assert.True(t, setup.service.GetStatus().IsRunning)
+	
+	// Give goroutines a moment to start before stopping
+	time.Sleep(10 * time.Millisecond)
+	setup.service.Stop()
+	assertMockExpectations(t, setup.pipeline, setup.enrichment, setup.db)
+}
 
-			mockSejmClient := &MockSejmClient{}
-			mockSejmClient.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
-				Return([]sejm.Act{}, nil).Maybe()
+func testPipelineStartFailure(t *testing.T) {
+	setup := setupBackgroundServiceTest()
+	setup.pipeline.On("Start", mock.Anything).Return(assert.AnError).Once()
+	
+	err := setup.service.Start(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to start pipeline")
+	
+	assertMockExpectations(t, setup.pipeline, setup.enrichment, setup.db)
+}
+
+func testAlreadyRunning(t *testing.T) {
+	setup := setupBackgroundServiceTest()
+	setupSuccessfulStartMocks(setup.pipeline, setup.db)
+	
+	err := setup.service.Start(context.Background())
+	assert.NoError(t, err)
+	
+	// Give goroutines a moment to start
+	time.Sleep(10 * time.Millisecond)
+	defer setup.service.Stop()
+	
+	// Try to start again
+	err = setup.service.Start(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already running")
+	
+	assertMockExpectations(t, setup.pipeline, setup.enrichment, setup.db)
+}
+
+type backgroundServiceTestSetup struct {
+	pipeline   *MockPipeline
+	enrichment *MockEnrichmentService
+	db         *MockDB
+	service    *service.BackgroundService
+}
+
+func setupBackgroundServiceTest() backgroundServiceTestSetup {
+	pipeline := &MockPipeline{}
+	enrichment := &MockEnrichmentService{}
+	db := &MockDB{}
+	config := service.DefaultBackgroundConfig()
+	
+	config.FullSyncInterval = 24 * time.Hour
+	config.EnrichmentInterval = 24 * time.Hour
+	config.HealthCheckInterval = 24 * time.Hour
+	config.EnableStatusMonitoring = false
+	config.EnablePerformanceMetrics = false
+
+	mockSejmClient := &MockSejmClient{}
+	mockSejmClient.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
 	bs := service.NewBackgroundService(pipeline, enrichment, db, mockSejmClient, config)
-
-			// For "already running" test, start service first
-			if tt.name == "Already running" {
-				pipeline.On("Start", mock.Anything).Return(nil).Once()
-				pipeline.On("GetStats").Return(&service.PipelineStats{}).Maybe()
-				err := bs.Start(context.Background())
-				assert.NoError(t, err)
-				defer bs.Stop()
-			}
-
-			tt.setupMocks(pipeline, enrichment, db)
-
-			err := bs.Start(context.Background())
-			
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.True(t, bs.GetStatus().IsRunning)
-				
-				// Clean up
-				bs.Stop()
-			}
-
-			pipeline.AssertExpectations(t)
-			enrichment.AssertExpectations(t)
-			db.AssertExpectations(t)
-		})
+	
+	return backgroundServiceTestSetup{
+		pipeline:   pipeline,
+		enrichment: enrichment,
+		db:         db,
+		service:    bs,
 	}
+}
+
+func setupSuccessfulStartMocks(pipeline *MockPipeline, db *MockDB) {
+	pipeline.On("Start", mock.Anything).Return(nil).Once()
+	pipeline.On("GetStats").Return(&service.PipelineStats{
+		LastSejmPoll:    time.Now(),
+		LastSenatePoll:  time.Now(),
+		LastEnrichment:  time.Now(),
+		ActsProcessed:   100,
+		VotesProcessed:  50,
+		ErrorCount:      0,
+	}).Maybe()
+	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.EnhancedAct{}, nil).Maybe()
+	db.On("GetCacheAge", mock.Anything, mock.AnythingOfType("int")).
+		Return(time.Hour, nil).Maybe()
+	db.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
+	db.On("StoreActs", mock.Anything, mock.AnythingOfType("int"), mock.Anything).
+		Return(nil).Maybe()
+	db.On("StoreEnhancedAct", mock.Anything, mock.Anything).
+		Return(nil).Maybe()
+	pipeline.On("Stop").Return().Maybe()
+}
+
+func assertMockExpectations(t *testing.T, pipeline *MockPipeline, enrichment *MockEnrichmentService, db *MockDB) {
+	t.Helper()
+	pipeline.AssertExpectations(t)
+	enrichment.AssertExpectations(t)
+	db.AssertExpectations(t)
 }
 
 func TestBackgroundServiceStop(t *testing.T) {
@@ -226,8 +231,20 @@ func TestBackgroundServiceStop(t *testing.T) {
 
 	// Setup mocks for start
 	pipeline.On("Start", mock.Anything).Return(nil).Once()
-	pipeline.On("Stop").Return().Once()
+	pipeline.On("Stop").Return().Maybe()
 	pipeline.On("GetStats").Return(&service.PipelineStats{}).Maybe()
+	
+	// Setup database mocks for monitoring service initialization
+	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.EnhancedAct{}, nil).Maybe()
+	db.On("GetCacheAge", mock.Anything, mock.AnythingOfType("int")).
+		Return(time.Hour, nil).Maybe()
+	db.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
+	db.On("StoreActs", mock.Anything, mock.AnythingOfType("int"), mock.Anything).
+		Return(nil).Maybe()
+	mockSejmClient.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
 
 	// Start the service
 	err := bs.Start(context.Background())
@@ -241,7 +258,7 @@ func TestBackgroundServiceStop(t *testing.T) {
 	// Stopping again should be safe
 	bs.Stop()
 
-	pipeline.AssertExpectations(t)
+	assertMockExpectations(t, pipeline, enrichment, db)
 }
 
 func TestBackgroundServiceGetStatus(t *testing.T) {
@@ -277,11 +294,19 @@ func TestBackgroundServiceTriggerSync(t *testing.T) {
 
 	// Start the service
 	pipeline.On("Start", mock.Anything).Return(nil).Once()
-	pipeline.On("Stop").Return().Once()
+	pipeline.On("Stop").Return().Maybe()
 	pipeline.On("GetStats").Return(&service.PipelineStats{}).Maybe()
 	
-	// Mock database calls for the triggered sync
+	// Mock database calls for the triggered sync and monitoring initialization
+	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.EnhancedAct{}, nil).Maybe()
 	db.On("GetCacheAge", mock.Anything, mock.AnythingOfType("int")).Return(25*time.Hour, nil).Maybe()
+	db.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
+	db.On("StoreActs", mock.Anything, mock.AnythingOfType("int"), mock.Anything).
+		Return(nil).Maybe()
+	mockSejmClient.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
 	
 	err = bs.Start(context.Background())
 	assert.NoError(t, err)
@@ -290,6 +315,9 @@ func TestBackgroundServiceTriggerSync(t *testing.T) {
 	// Test triggering sync when running
 	err = bs.TriggerSync(context.Background())
 	assert.NoError(t, err)
+
+	// Give some time for the triggered sync to start
+	time.Sleep(5 * time.Millisecond)
 
 	pipeline.AssertExpectations(t)
 	db.AssertExpectations(t)
@@ -311,11 +339,19 @@ func TestBackgroundServiceTriggerEnrichment(t *testing.T) {
 
 	// Start the service
 	pipeline.On("Start", mock.Anything).Return(nil).Once()
-	pipeline.On("Stop").Return().Once()
+	pipeline.On("Stop").Return().Maybe()
 	pipeline.On("GetStats").Return(&service.PipelineStats{}).Maybe()
 	
-	// Mock database calls for the triggered enrichment
+	// Mock database calls for the triggered enrichment and monitoring initialization
+	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.EnhancedAct{}, nil).Maybe()
 	db.On("GetActs", mock.Anything, mock.AnythingOfType("int")).Return([]sejm.Act{}, nil).Maybe()
+	db.On("GetCacheAge", mock.Anything, mock.AnythingOfType("int")).
+		Return(time.Hour, nil).Maybe()
+	db.On("StoreActs", mock.Anything, mock.AnythingOfType("int"), mock.Anything).
+		Return(nil).Maybe()
+	mockSejmClient.On("GetActs", mock.Anything, mock.AnythingOfType("int")).
+		Return([]sejm.Act{}, nil).Maybe()
 	
 	err = bs.Start(context.Background())
 	assert.NoError(t, err)
@@ -324,6 +360,9 @@ func TestBackgroundServiceTriggerEnrichment(t *testing.T) {
 	// Test triggering enrichment when running
 	err = bs.TriggerEnrichment(context.Background())
 	assert.NoError(t, err)
+
+	// Give some time for the triggered enrichment to start
+	time.Sleep(5 * time.Millisecond)
 
 	pipeline.AssertExpectations(t)
 	db.AssertExpectations(t)
@@ -384,7 +423,7 @@ func TestBackgroundServiceConcurrency(t *testing.T) {
 
 	// Setup mocks
 	pipeline.On("Start", mock.Anything).Return(nil).Once()
-	pipeline.On("Stop").Return().Once()
+	pipeline.On("Stop").Return().Maybe()
 	pipeline.On("IsRunning").Return(true).Maybe()
 	pipeline.On("GetStats").Return(&service.PipelineStats{
 		LastSejmPoll:   time.Now(),

@@ -25,11 +25,16 @@ type StatusChangeEvent struct {
 type StatusChangeType string
 
 const (
-	StatusChangeTypeProgression StatusChangeType = "progression"  // Moving forward in process
-	StatusChangeTypeRegression  StatusChangeType = "regression"   // Moving backward (rare)
-	StatusChangeTypeVoting      StatusChangeType = "voting"       // Voting occurred
-	StatusChangeTypePublication StatusChangeType = "publication"  // Published or entered force
-	StatusChangeTypeRejection   StatusChangeType = "rejection"    // Rejected or vetoed
+	// StatusChangeTypeProgression represents moving forward in process
+	StatusChangeTypeProgression StatusChangeType = "progression"
+	// StatusChangeTypeRegression represents moving backward (rare)
+	StatusChangeTypeRegression  StatusChangeType = "regression"
+	// StatusChangeTypeVoting represents voting occurred
+	StatusChangeTypeVoting      StatusChangeType = "voting"
+	// StatusChangeTypePublication represents published or entered force
+	StatusChangeTypePublication StatusChangeType = "publication"
+	// StatusChangeTypeRejection represents rejected or vetoed
+	StatusChangeTypeRejection   StatusChangeType = "rejection"
 )
 
 // NotificationChannel represents a notification delivery channel
@@ -42,7 +47,7 @@ type NotificationChannel interface {
 type MonitoringService struct {
 	db                Database
 	channels          []NotificationChannel
-	config            *MonitoringConfig
+	config            *monitoringConfig
 	
 	// State tracking
 	lastSnapshot      map[string]*sejm.EnhancedAct
@@ -56,8 +61,8 @@ type MonitoringService struct {
 	lastCheckTime     time.Time
 }
 
-// MonitoringConfig contains configuration for the monitoring service
-type MonitoringConfig struct {
+// monitoringConfig contains configuration for the monitoring service
+type monitoringConfig struct {
 	// Check intervals
 	CheckInterval         time.Duration
 	SnapshotRetention     time.Duration
@@ -83,10 +88,15 @@ type MonitoringConfig struct {
 	MaxConcurrentChecks   int
 }
 
-// NewMonitoringService creates a new monitoring service
-func NewMonitoringService(database Database, config *MonitoringConfig) *MonitoringService {
+// NewMonitoringService creates a new monitoring service with default config
+func NewMonitoringService(database Database) *MonitoringService {
+	return NewMonitoringServiceWithConfig(database, nil)
+}
+
+// NewMonitoringServiceWithConfig creates a new monitoring service with custom config
+func NewMonitoringServiceWithConfig(database Database, config *monitoringConfig) *MonitoringService {
 	if config == nil {
-		config = DefaultMonitoringConfig()
+		config = createDefaultMonitoringConfig()
 	}
 	
 	return &MonitoringService{
@@ -99,10 +109,10 @@ func NewMonitoringService(database Database, config *MonitoringConfig) *Monitori
 }
 
 // DefaultMonitoringConfig returns a sensible default configuration
-func DefaultMonitoringConfig() *MonitoringConfig {
+func createDefaultMonitoringConfig() *monitoringConfig {
 	currentYear := time.Now().Year()
 	
-	return &MonitoringConfig{
+	return &monitoringConfig{
 		CheckInterval:         15 * time.Minute,
 		SnapshotRetention:     7 * 24 * time.Hour, // 7 days
 		
@@ -121,6 +131,27 @@ func DefaultMonitoringConfig() *MonitoringConfig {
 		
 		BatchSize:             50,
 		MaxConcurrentChecks:   5,
+	}
+}
+
+// DefaultMonitoringConfig returns a sensible default configuration (for external access)
+func DefaultMonitoringConfig() map[string]any {
+	config := createDefaultMonitoringConfig()
+	return map[string]any{
+		"check_interval":         config.CheckInterval,
+		"snapshot_retention":     config.SnapshotRetention,
+		"enable_voting_detection": config.EnableVotingDetection,
+		"enable_stage_tracking":   config.EnableStageTracking,
+		"enable_timeline_updates": config.EnableTimelineUpdates,
+		"notify_on_progression":   config.NotifyOnProgression,
+		"notify_on_voting":        config.NotifyOnVoting,
+		"notify_on_publication":   config.NotifyOnPublication,
+		"notify_on_rejection":     config.NotifyOnRejection,
+		"minimum_change_threshold": config.MinimumChangeThreshold,
+		"monitored_years":         config.MonitoredYears,
+		"excluded_statuses":       config.ExcludedStatuses,
+		"batch_size":              config.BatchSize,
+		"max_concurrent_checks":   config.MaxConcurrentChecks,
 	}
 }
 
@@ -147,10 +178,7 @@ func (ms *MonitoringService) Start(ctx context.Context) error {
 		"monitored_years", ms.config.MonitoredYears)
 	
 	// Initialize snapshot
-	if err := ms.initializeSnapshot(ctx); err != nil {
-		ms.running = false
-		return err
-	}
+	ms.initializeSnapshot(ctx)
 	
 	// Start monitoring loop
 	go ms.monitoringLoop(ctx)
@@ -173,26 +201,33 @@ func (ms *MonitoringService) Stop() {
 }
 
 // initializeSnapshot creates the initial snapshot of all monitored acts
-func (ms *MonitoringService) initializeSnapshot(ctx context.Context) error {
+func (ms *MonitoringService) initializeSnapshot(ctx context.Context) {
 	slog.Info("Initializing monitoring snapshot")
 	
 	for _, year := range ms.config.MonitoredYears {
-		acts, err := ms.db.GetEnhancedActs(ctx, year)
-		if err != nil {
-			slog.Warn("Failed to get enhanced acts for snapshot", "year", year, "error", err)
-			continue
-		}
-		
-		for _, act := range acts {
-			if ms.shouldMonitorAct(&act) {
-				// Create a copy for the snapshot
-				actCopy := act
-				ms.lastSnapshot[act.ID] = &actCopy
-			}
+		if err := ms.processYearForSnapshot(ctx, year); err != nil {
+			slog.Warn("Failed to process year for snapshot", "year", year, "error", err)
 		}
 	}
 	
 	slog.Info("Monitoring snapshot initialized", "acts_count", len(ms.lastSnapshot))
+}
+
+// processYearForSnapshot processes acts from a specific year for snapshot
+func (ms *MonitoringService) processYearForSnapshot(ctx context.Context, year int) error {
+	acts, err := ms.db.GetEnhancedActs(ctx, year)
+	if err != nil {
+		return err
+	}
+	
+	for _, act := range acts {
+		if ms.shouldMonitorAct(&act) {
+			// Create a copy for the snapshot
+			actCopy := act
+			ms.lastSnapshot[act.ID] = &actCopy
+		}
+	}
+	
 	return nil
 }
 
@@ -259,33 +294,42 @@ func (ms *MonitoringService) checkYearForChanges(ctx context.Context, year int) 
 			continue
 		}
 		
-		// Get previous state
-		ms.mu.RLock()
-		previousAct, exists := ms.lastSnapshot[currentAct.ID]
-		ms.mu.RUnlock()
-		
-		if !exists {
-			// New act - add to monitoring but don't generate event
-			ms.mu.Lock()
-			actCopy := currentAct
-			ms.lastSnapshot[currentAct.ID] = &actCopy
-			ms.mu.Unlock()
-			continue
-		}
-		
-		// Detect changes
-		if changeEvents := ms.detectChanges(previousAct, &currentAct); len(changeEvents) > 0 {
-			changes = append(changes, changeEvents...)
-			
-			// Update snapshot
-			ms.mu.Lock()
-			actCopy := currentAct
-			ms.lastSnapshot[currentAct.ID] = &actCopy
-			ms.mu.Unlock()
-		}
+		actChanges := ms.processActForChanges(&currentAct)
+		changes = append(changes, actChanges...)
 	}
 	
 	return changes, nil
+}
+
+// processActForChanges processes a single act for changes
+func (ms *MonitoringService) processActForChanges(currentAct *sejm.EnhancedAct) []*StatusChangeEvent {
+	// Get previous state
+	ms.mu.RLock()
+	previousAct, exists := ms.lastSnapshot[currentAct.ID]
+	ms.mu.RUnlock()
+	
+	if !exists {
+		// New act - add to monitoring but don't generate event
+		ms.addActToSnapshot(currentAct)
+		return nil
+	}
+	
+	// Detect changes
+	changeEvents := ms.detectChanges(previousAct, currentAct)
+	if len(changeEvents) > 0 {
+		// Update snapshot
+		ms.addActToSnapshot(currentAct)
+	}
+	
+	return changeEvents
+}
+
+// addActToSnapshot safely adds an act to the snapshot
+func (ms *MonitoringService) addActToSnapshot(act *sejm.EnhancedAct) {
+	ms.mu.Lock()
+	actCopy := *act
+	ms.lastSnapshot[act.ID] = &actCopy
+	ms.mu.Unlock()
 }
 
 // detectChanges detects specific types of changes between two act states
@@ -354,9 +398,22 @@ func (ms *MonitoringService) detectChanges(previous, current *sejm.EnhancedAct) 
 }
 
 // categorizeStatusChange determines the type of status change
-func (ms *MonitoringService) categorizeStatusChange(previous, current string) StatusChangeType {
-	// Define status progression order
-	statusOrder := map[string]int{
+func (*MonitoringService) categorizeStatusChange(previous, current string) StatusChangeType {
+	statusOrder := getStatusOrder()
+	
+	prevOrder, prevExists := statusOrder[previous]
+	currOrder, currExists := statusOrder[current]
+	
+	if !prevExists || !currExists {
+		return StatusChangeTypeProgression // Default
+	}
+	
+	return determineChangeType(previous, current, prevOrder, currOrder)
+}
+
+// getStatusOrder returns the status progression mapping
+func getStatusOrder() map[string]int {
+	return map[string]int{
 		"submitted":           1,
 		"committee_work":      2,
 		"second_reading":      3,
@@ -369,36 +426,30 @@ func (ms *MonitoringService) categorizeStatusChange(previous, current string) St
 		"published":           10,
 		"in_force":            11,
 	}
-	
-	prevOrder, prevExists := statusOrder[previous]
-	currOrder, currExists := statusOrder[current]
-	
-	if !prevExists || !currExists {
-		return StatusChangeTypeProgression // Default
-	}
-	
-	// Determine change type based on progression
-	if currOrder > prevOrder {
-		switch current {
-		case "published", "in_force":
-			return StatusChangeTypePublication
-		default:
-			return StatusChangeTypeProgression
-		}
-	} else if currOrder < prevOrder {
-		return StatusChangeTypeRegression
-	}
-	
-	// Check for rejection statuses
+}
+
+// determineChangeType determines the specific type of status change
+func determineChangeType(_, current string, prevOrder, currOrder int) StatusChangeType {
+	// Check for rejection statuses first
 	if current == "senate_rejected" || current == "presidential_veto" {
 		return StatusChangeTypeRejection
+	}
+	
+	// Determine based on progression direction
+	if currOrder > prevOrder {
+		if current == "published" || current == "in_force" {
+			return StatusChangeTypePublication
+		}
+		return StatusChangeTypeProgression
+	} else if currOrder < prevOrder {
+		return StatusChangeTypeRegression
 	}
 	
 	return StatusChangeTypeProgression
 }
 
 // hasVotingChanges checks if there are new voting records
-func (ms *MonitoringService) hasVotingChanges(previous, current *sejm.EnhancedAct) bool {
+func (*MonitoringService) hasVotingChanges(previous, current *sejm.EnhancedAct) bool {
 	return len(current.SejmVotes) > len(previous.SejmVotes) ||
 		   len(current.SenateVotes) > len(previous.SenateVotes)
 }
@@ -428,28 +479,46 @@ func (ms *MonitoringService) processStatusChanges(ctx context.Context, changes [
 	slog.Info("Processing status changes", "count", len(changes))
 	
 	for _, change := range changes {
-		if !ms.shouldNotifyForChange(change) {
-			continue
-		}
-		
-		// Send notifications to all channels
-		for _, channel := range ms.channels {
-			if err := channel.Send(ctx, change); err != nil {
-				slog.Error("Failed to send notification", 
-					"channel", channel.GetChannelType(),
-					"act_id", change.ActID,
-					"error", err)
-			} else {
-				ms.mu.Lock()
-				ms.notificationsSent++
-				ms.mu.Unlock()
-			}
-		}
-		
-		ms.mu.Lock()
-		ms.eventsGenerated++
-		ms.mu.Unlock()
+		ms.processStatusChange(ctx, change)
 	}
+}
+
+// processStatusChange processes a single status change event
+func (ms *MonitoringService) processStatusChange(ctx context.Context, change *StatusChangeEvent) {
+	if !ms.shouldNotifyForChange(change) {
+		return
+	}
+	
+	ms.sendNotificationsForChange(ctx, change)
+	ms.incrementEventCounter()
+}
+
+// sendNotificationsForChange sends notifications to all channels
+func (ms *MonitoringService) sendNotificationsForChange(ctx context.Context, change *StatusChangeEvent) {
+	for _, channel := range ms.channels {
+		if err := channel.Send(ctx, change); err != nil {
+			slog.Error("Failed to send notification", 
+				"channel", channel.GetChannelType(),
+				"act_id", change.ActID,
+				"error", err)
+		} else {
+			ms.incrementNotificationCounter()
+		}
+	}
+}
+
+// incrementEventCounter safely increments the events generated counter
+func (ms *MonitoringService) incrementEventCounter() {
+	ms.mu.Lock()
+	ms.eventsGenerated++
+	ms.mu.Unlock()
+}
+
+// incrementNotificationCounter safely increments the notifications sent counter
+func (ms *MonitoringService) incrementNotificationCounter() {
+	ms.mu.Lock()
+	ms.notificationsSent++
+	ms.mu.Unlock()
 }
 
 // shouldNotifyForChange determines if a change should trigger notifications
@@ -485,17 +554,17 @@ func (ms *MonitoringService) GetStats() map[string]any {
 }
 
 // LogNotificationChannel implements a simple logging notification channel
-type LogNotificationChannel struct {
+type logNotificationChannel struct {
 	name string
 }
 
 // NewLogNotificationChannel creates a new log-based notification channel
-func NewLogNotificationChannel(name string) *LogNotificationChannel {
-	return &LogNotificationChannel{name: name}
+func NewLogNotificationChannel(name string) NotificationChannel {
+	return &logNotificationChannel{name: name}
 }
 
 // Send sends a notification by logging it
-func (lnc *LogNotificationChannel) Send(_ context.Context, event *StatusChangeEvent) error {
+func (lnc *logNotificationChannel) Send(_ context.Context, event *StatusChangeEvent) error {
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		return err
@@ -513,7 +582,7 @@ func (lnc *LogNotificationChannel) Send(_ context.Context, event *StatusChangeEv
 }
 
 // GetChannelType returns the channel type
-func (lnc *LogNotificationChannel) GetChannelType() string {
+func (*logNotificationChannel) GetChannelType() string {
 	return "log"
 }
 
@@ -534,7 +603,7 @@ func NewWebhookNotificationChannel(name, webhookURL string) *WebhookNotification
 }
 
 // Send sends a notification via webhook
-func (wnc *WebhookNotificationChannel) Send(ctx context.Context, event *StatusChangeEvent) error {
+func (wnc *WebhookNotificationChannel) Send(_ context.Context, event *StatusChangeEvent) error {
 	// Implementation would make HTTP POST to webhook URL
 	// For now, just log that webhook would be called
 	slog.Info("Webhook notification",
@@ -547,6 +616,6 @@ func (wnc *WebhookNotificationChannel) Send(ctx context.Context, event *StatusCh
 }
 
 // GetChannelType returns the channel type
-func (wnc *WebhookNotificationChannel) GetChannelType() string {
+func (*WebhookNotificationChannel) GetChannelType() string {
 	return "webhook"
 }

@@ -3,7 +3,6 @@ package service_test
 import (
 	"context"
 	"testing"
-	"time"
 	"ustawka/sejm"
 	"ustawka/service"
 
@@ -11,29 +10,25 @@ import (
 )
 
 func TestNewDataValidationService(t *testing.T) {
-	validationService := service.NewDataValidationService(nil)
+	validationService := service.NewDataValidationService()
 	assert.NotNil(t, validationService)
 	
-	config := &service.ValidationConfig{
-		EnableStrictValidation: true,
-		RequireAllFields:      true,
-		MaxValidationTime:     10 * time.Second,
-	}
-	validationService2 := service.NewDataValidationService(config)
-	assert.NotNil(t, validationService2)
+	// Test the service works
+	stats := validationService.GetValidationStats()
+	assert.NotNil(t, stats)
 }
 
 func TestDefaultValidationConfig(t *testing.T) {
 	config := service.DefaultValidationConfig()
 	
 	assert.NotNil(t, config)
-	assert.False(t, config.EnableStrictValidation)
-	assert.True(t, config.ValidateReferences)
-	assert.Contains(t, config.EnabledRules, "basic_fields")
+	assert.False(t, config["enable_strict_validation"].(bool))
+	assert.True(t, config["validate_references"].(bool))
+	assert.Contains(t, config["enabled_rules"], "basic_fields")
 }
 
 func TestValidateActValid(t *testing.T) {
-	validationService := service.NewDataValidationService(nil)
+	validationService := service.NewDataValidationService()
 	ctx := context.Background()
 	
 	act := &sejm.EnhancedAct{
@@ -50,7 +45,7 @@ func TestValidateActValid(t *testing.T) {
 }
 
 func TestValidateActInvalid(t *testing.T) {
-	validationService := service.NewDataValidationService(nil)
+	validationService := service.NewDataValidationService()
 	ctx := context.Background()
 	
 	act := &sejm.EnhancedAct{
@@ -70,7 +65,7 @@ func TestValidateActBatch(t *testing.T) {
 		t.Skip("skipping batch validation test in short mode")
 	}
 	
-	validationService := service.NewDataValidationService(nil)
+	validationService := service.NewDataValidationService()
 	ctx := context.Background()
 	
 	acts := []sejm.EnhancedAct{
@@ -96,7 +91,7 @@ func TestValidateActBatch(t *testing.T) {
 }
 
 func TestValidationServiceGetStats(t *testing.T) {
-	validationService := service.NewDataValidationService(nil)
+	validationService := service.NewDataValidationService()
 	
 	stats := validationService.GetValidationStats()
 	
@@ -110,7 +105,7 @@ func TestValidationServiceGetStats(t *testing.T) {
 }
 
 func BenchmarkValidateAct(b *testing.B) {
-	validationService := service.NewDataValidationService(nil)
+	validationService := service.NewDataValidationService()
 	ctx := context.Background()
 	
 	act := &sejm.EnhancedAct{

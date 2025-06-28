@@ -44,7 +44,7 @@ func (m *MockNotificationChannel) GetSentEvents() []*service.StatusChangeEvent {
 func TestNewMonitoringService(t *testing.T) {
 	db := &MockDB{}
 	
-	ms := service.NewMonitoringService(db, nil)
+	ms := service.NewMonitoringService(db)
 	
 	assert.NotNil(t, ms)
 	assert.NotNil(t, ms.GetStats())
@@ -57,18 +57,18 @@ func TestDefaultMonitoringConfig(t *testing.T) {
 	config := service.DefaultMonitoringConfig()
 	
 	assert.NotNil(t, config)
-	assert.Equal(t, 15*time.Minute, config.CheckInterval)
-	assert.True(t, config.EnableVotingDetection)
-	assert.True(t, config.EnableStageTracking)
-	assert.True(t, config.NotifyOnProgression)
-	assert.True(t, config.NotifyOnVoting)
-	assert.Equal(t, 50, config.BatchSize)
-	assert.Contains(t, config.MonitoredYears, time.Now().Year())
+	assert.Equal(t, 15*time.Minute, config["check_interval"])
+	assert.True(t, config["enable_voting_detection"].(bool))
+	assert.True(t, config["enable_stage_tracking"].(bool))
+	assert.True(t, config["notify_on_progression"].(bool))
+	assert.True(t, config["notify_on_voting"].(bool))
+	assert.Equal(t, 50, config["batch_size"])
+	assert.Contains(t, config["monitored_years"], time.Now().Year())
 }
 
 func TestAddNotificationChannel(t *testing.T) {
 	db := &MockDB{}
-	ms := service.NewMonitoringService(db, nil)
+	ms := service.NewMonitoringService(db)
 	
 	channel1 := NewMockNotificationChannel("test1")
 	channel2 := NewMockNotificationChannel("test2")
@@ -107,11 +107,8 @@ func TestMonitoringServiceStart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db := &MockDB{}
-			config := service.DefaultMonitoringConfig()
-			// Reduce check interval for faster testing
-			config.CheckInterval = 100 * time.Millisecond
 			
-			ms := service.NewMonitoringService(db, config)
+			ms := service.NewMonitoringService(db)
 			
 			tt.setupMocks(db)
 			
@@ -135,10 +132,8 @@ func TestMonitoringServiceStart(t *testing.T) {
 
 func TestMonitoringServiceStop(t *testing.T) {
 	db := &MockDB{}
-	config := service.DefaultMonitoringConfig()
-	config.CheckInterval = 1 * time.Hour // Long interval to avoid automatic checks
 	
-	ms := service.NewMonitoringService(db, config)
+	ms := service.NewMonitoringService(db)
 	
 	// Mock initialization
 	db.On("GetEnhancedActs", mock.Anything, mock.AnythingOfType("int")).
@@ -165,11 +160,8 @@ func TestStatusChangeDetection(t *testing.T) {
 	}
 	
 	db := &MockDB{}
-	config := service.DefaultMonitoringConfig()
-	config.CheckInterval = 50 * time.Millisecond
-	config.MonitoredYears = []int{2024}
 	
-	ms := service.NewMonitoringService(db, config)
+	ms := service.NewMonitoringService(db)
 	
 	// Mock notification channel
 	mockChannel := NewMockNotificationChannel("test")
@@ -262,7 +254,7 @@ func TestWebhookNotificationChannel(t *testing.T) {
 
 func TestMonitoringServiceStats(t *testing.T) {
 	db := &MockDB{}
-	ms := service.NewMonitoringService(db, nil)
+	ms := service.NewMonitoringService(db)
 	
 	// Add some channels
 	ms.AddNotificationChannel(NewMockNotificationChannel("test1"))
@@ -288,17 +280,17 @@ func TestMonitoringConfigValidation(t *testing.T) {
 	config := service.DefaultMonitoringConfig()
 	
 	// Test that all required fields are set
-	assert.Greater(t, config.CheckInterval, time.Duration(0))
-	assert.Greater(t, config.BatchSize, 0)
-	assert.Greater(t, len(config.MonitoredYears), 0)
-	assert.True(t, config.NotifyOnProgression || config.NotifyOnVoting || 
-		config.NotifyOnPublication || config.NotifyOnRejection)
+	assert.Greater(t, config["check_interval"].(time.Duration), time.Duration(0))
+	assert.Greater(t, config["batch_size"].(int), 0)
+	assert.Greater(t, len(config["monitored_years"].([]int)), 0)
+	assert.True(t, config["notify_on_progression"].(bool) || config["notify_on_voting"].(bool) || 
+		config["notify_on_publication"].(bool) || config["notify_on_rejection"].(bool))
 }
 
 // Benchmark tests for performance validation
 func BenchmarkMonitoringServiceGetStats(b *testing.B) {
 	db := &MockDB{}
-	ms := service.NewMonitoringService(db, nil)
+	ms := service.NewMonitoringService(db)
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -309,8 +301,7 @@ func BenchmarkMonitoringServiceGetStats(b *testing.B) {
 
 func BenchmarkStatusChangeDetection(b *testing.B) {
 	db := &MockDB{}
-	config := service.DefaultMonitoringConfig()
-	ms := service.NewMonitoringService(db, config)
+	ms := service.NewMonitoringService(db)
 	
 	// Setup test data
 	testActs := make([]sejm.EnhancedAct, 100)
