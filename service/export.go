@@ -381,31 +381,38 @@ func (es *ExportService) exportComparisonCSV(comparison *ActComparison) ([]byte,
 
 	// Write similarities
 	if len(comparison.Similarities) > 0 {
-		if err := writer.Write([]string{""}); err != nil {
-			return nil, fmt.Errorf("failed to write CSV separator: %w", err)
-		}
-		if err := writer.Write([]string{"Podobieństwa"}); err != nil {
-			return nil, fmt.Errorf("failed to write CSV similarities header: %w", err)
-		}
-		if err := writer.Write([]string{"Pole", "Etykieta", "Wartość", "Opis"}); err != nil {
-			return nil, fmt.Errorf("failed to write CSV similarities columns: %w", err)
-		}
-
-		for _, sim := range comparison.Similarities {
-			row := []string{
-				sim.Field,
-				sim.FieldLabel,
-				fmt.Sprintf("%v", sim.Value),
-				sim.Description,
-			}
-			if err := writer.Write(row); err != nil {
-				return nil, err
-			}
+		if err := es.writeSimilaritiesToCSV(writer, comparison.Similarities); err != nil {
+			return nil, err
 		}
 	}
 
 	writer.Flush()
 	return buf.Bytes(), nil
+}
+
+func (*ExportService) writeSimilaritiesToCSV(writer *csv.Writer, similarities []FieldSimilarity) error {
+	if err := writer.Write([]string{""}); err != nil {
+		return fmt.Errorf("failed to write CSV separator: %w", err)
+	}
+	if err := writer.Write([]string{"Podobieństwa"}); err != nil {
+		return fmt.Errorf("failed to write CSV similarities header: %w", err)
+	}
+	if err := writer.Write([]string{"Pole", "Etykieta", "Wartość", "Opis"}); err != nil {
+		return fmt.Errorf("failed to write CSV similarities columns: %w", err)
+	}
+
+	for _, sim := range similarities {
+		row := []string{
+			sim.Field,
+			sim.FieldLabel,
+			fmt.Sprintf("%v", sim.Value),
+			sim.Description,
+		}
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // exportComparisonPDF exports comparison results as PDF (basic implementation)

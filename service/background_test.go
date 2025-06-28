@@ -19,14 +19,24 @@ type MockEnrichmentService struct {
 // Ensure MockEnrichmentService implements EnrichmentInterface
 var _ service.EnrichmentInterface = (*MockEnrichmentService)(nil)
 
-func (m *MockEnrichmentService) EnrichAct(ctx context.Context, act *sejm.EnhancedAct) (*service.EnrichmentResult, error) {
+func (m *MockEnrichmentService) EnrichAct(
+	ctx context.Context, 
+	act *sejm.EnhancedAct,
+) (*service.EnrichmentResult, error) {
 	args := m.Called(ctx, act)
-	return args.Get(0).(*service.EnrichmentResult), args.Error(1)
+	result, ok := args.Get(0).(*service.EnrichmentResult)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return result, args.Error(1)
 }
 
 func (m *MockEnrichmentService) ValidateEnrichment(result *service.EnrichmentResult) []string {
 	args := m.Called(result)
-	return args.Get(0).([]string)
+	if result, ok := args.Get(0).([]string); ok {
+		return result
+	}
+	return nil
 }
 
 // MockPipeline is a mock for the pipeline
@@ -57,7 +67,10 @@ func (m *MockPipeline) IsRunning() bool {
 
 func (m *MockPipeline) GetStats() *service.PipelineStats {
 	args := m.Called()
-	return args.Get(0).(*service.PipelineStats)
+	if stats, ok := args.Get(0).(*service.PipelineStats); ok {
+		return stats
+	}
+	return nil
 }
 
 func TestNewBackgroundService(t *testing.T) {

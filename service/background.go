@@ -320,7 +320,7 @@ func (bs *BackgroundService) runFullSync(ctx context.Context) {
 	
 	// Process each year
 	for _, year := range bs.config.YearsToProcess {
-		if err := bs.syncYear(ctx, year, true); err != nil {
+		if err := bs.syncYear(ctx, year, SyncOptions{ForceSync: true}); err != nil {
 			slog.Error("Failed to sync year in full sync", "year", year, "error", err)
 			bs.incrementErrorCount()
 		}
@@ -338,7 +338,7 @@ func (bs *BackgroundService) runIncrementalSync(ctx context.Context) {
 	
 	// Focus on current year for incremental updates
 	currentYear := bs.config.CurrentYear
-	if err := bs.syncYear(ctx, currentYear, false); err != nil {
+	if err := bs.syncYear(ctx, currentYear, SyncOptions{ForceSync: false}); err != nil {
 		slog.Error("Failed incremental sync", "year", currentYear, "error", err)
 		bs.incrementErrorCount()
 		return
@@ -348,10 +348,15 @@ func (bs *BackgroundService) runIncrementalSync(ctx context.Context) {
 	slog.Info("Completed incremental synchronization", "duration", duration)
 }
 
+// SyncOptions contains options for sync operations
+type SyncOptions struct {
+	ForceSync bool
+}
+
 // syncYear synchronizes data for a specific year
-func (bs *BackgroundService) syncYear(ctx context.Context, year int, fullSync bool) error {
+func (bs *BackgroundService) syncYear(ctx context.Context, year int, opts SyncOptions) error {
 	// Check if sync is needed
-	if !fullSync {
+	if !opts.ForceSync {
 		cacheAge, err := bs.db.GetCacheAge(ctx, year)
 		if err == nil && cacheAge < 30*time.Minute {
 			slog.Debug("Skipping sync - cache is fresh", "year", year, "age", cacheAge)
@@ -426,11 +431,7 @@ func (bs *BackgroundService) enrichYear(ctx context.Context, year int) (int, err
 		}
 		
 		batch := acts[i:end]
-		processed, err := bs.enrichActBatch(ctx, batch)
-		if err != nil {
-			slog.Error("Failed to enrich batch", "start", i, "error", err)
-			continue
-		}
+		processed := bs.enrichActBatch(ctx, batch)
 		
 		enrichedCount += processed
 	}
@@ -439,40 +440,41 @@ func (bs *BackgroundService) enrichYear(ctx context.Context, year int) (int, err
 }
 
 // enrichActBatch enriches a batch of acts
-func (bs *BackgroundService) enrichActBatch(ctx context.Context, acts []sejm.Act) (int, error) {
+func (bs *BackgroundService) enrichActBatch(ctx context.Context, acts []sejm.Act) int {
 	enrichedCount := 0
 	
 	for _, act := range acts {
-		// Convert to enhanced act
-		enhancedAct := bs.convertToEnhancedAct(act)
-		
-		// Check if already enriched recently
-		if bs.isRecentlyEnriched(ctx, enhancedAct.ID) {
-			continue
+		if bs.processSingleAct(ctx, act) {
+			enrichedCount++
 		}
-		
-		// Perform enrichment
-		result, err := bs.enrichmentService.EnrichAct(ctx, &enhancedAct)
-		if err != nil {
-			slog.Error("Failed to enrich act", "act_id", act.ID, "error", err)
-			continue
-		}
-		
-		// Validate enrichment if enabled
-		if bs.config.EnableDataValidation {
-			bs.validateEnrichmentResult(ctx, act.ID, result)
-		}
-		
-		// Store enriched act
-		if err := bs.db.StoreEnhancedAct(ctx, result.EnhancedAct); err != nil {
-			slog.Error("Failed to store enriched act", "act_id", act.ID, "error", err)
-			continue
-		}
-		
-		enrichedCount++
 	}
 	
-	return enrichedCount, nil
+	return enrichedCount
+}
+
+func (bs *BackgroundService) processSingleAct(ctx context.Context, act sejm.Act) bool {
+	enhancedAct := bs.convertToEnhancedAct(act)
+	
+	if bs.isRecentlyEnriched(ctx, enhancedAct.ID) {
+		return false
+	}
+	
+	result, err := bs.enrichmentService.EnrichAct(ctx, &enhancedAct)
+	if err != nil {
+		slog.Error("Failed to enrich act", "act_id", act.ID, "error", err)
+		return false
+	}
+	
+	if bs.config.EnableDataValidation {
+		bs.validateEnrichmentResult(ctx, act.ID, result)
+	}
+	
+	if err := bs.db.StoreEnhancedAct(ctx, result.EnhancedAct); err != nil {
+		slog.Error("Failed to store enriched act", "act_id", act.ID, "error", err)
+		return false
+	}
+	
+	return true
 }
 
 // convertToEnhancedAct converts basic Act to EnhancedAct
@@ -515,11 +517,19 @@ func (bs *BackgroundService) isRecentlyEnriched(ctx context.Context, actID strin
 
 // performHealthCheck checks system health and performs recovery if needed
 func (bs *BackgroundService) performHealthCheck(ctx context.Context) {
+	bs.updateHealthCheckTime()
+	bs.checkPipelineHealth(ctx)
+	bs.checkErrorRate()
+	bs.resetDailyCountersIfNeeded()
+}
+
+func (bs *BackgroundService) updateHealthCheckTime() {
 	bs.mu.Lock()
 	bs.lastHealthCheck = time.Now()
 	bs.mu.Unlock()
-	
-	// Check pipeline health
+}
+
+func (bs *BackgroundService) checkPipelineHealth(ctx context.Context) {
 	if !bs.pipeline.IsRunning() {
 		slog.Warn("Pipeline is not running, attempting restart")
 		if bs.config.EnableAutoRecovery {
@@ -529,14 +539,15 @@ func (bs *BackgroundService) performHealthCheck(ctx context.Context) {
 			}
 		}
 	}
-	
-	// Check error rate
+}
+
+func (bs *BackgroundService) checkErrorRate() {
 	if bs.errorCount > int64(bs.config.MaxErrorsPerHour) {
 		slog.Warn("High error rate detected", "errors", bs.errorCount)
-		// Could implement circuit breaker logic here
 	}
-	
-	// Reset daily counters if needed
+}
+
+func (bs *BackgroundService) resetDailyCountersIfNeeded() {
 	if time.Now().Hour() == 0 && time.Now().Minute() < 5 {
 		bs.mu.Lock()
 		bs.processedToday = 0

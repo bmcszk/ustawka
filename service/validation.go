@@ -248,22 +248,23 @@ func (dvs *DataValidationService) calculateSummary(issues []ValidationIssue, tot
 	return summary
 }
 
-// Basic Fields Validation Rule
+// BasicFieldsRule validates that required basic fields are present and properly formatted.
 type BasicFieldsRule struct{}
 
+// NewBasicFieldsRule creates a new BasicFieldsRule validator.
 func NewBasicFieldsRule() *BasicFieldsRule {
 	return &BasicFieldsRule{}
 }
 
-func (r *BasicFieldsRule) GetName() string {
+func (_ *BasicFieldsRule) GetName() string {
 	return "basic_fields"
 }
 
-func (r *BasicFieldsRule) GetDescription() string {
+func (_ *BasicFieldsRule) GetDescription() string {
 	return "Validates that required basic fields are present and properly formatted"
 }
 
-func (r *BasicFieldsRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+func (_ *BasicFieldsRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Validate ID format
@@ -331,21 +332,25 @@ func (r *BasicFieldsRule) Validate(_ context.Context, act *sejm.EnhancedAct) []V
 	return issues
 }
 
-// Status Consistency Validation Rule
+// StatusConsistencyRule validates consistency between basic status and detailed status.
 type StatusConsistencyRule struct{}
 
+// NewStatusConsistencyRule creates a new StatusConsistencyRule validator.
 func NewStatusConsistencyRule() *StatusConsistencyRule {
 	return &StatusConsistencyRule{}
 }
 
-func (r *StatusConsistencyRule) GetName() string {
+// GetName returns the name of the status consistency validation rule
+func (*StatusConsistencyRule) GetName() string {
 	return "status_consistency"
 }
 
-func (r *StatusConsistencyRule) GetDescription() string {
+// GetDescription returns the description of the status consistency validation rule
+func (*StatusConsistencyRule) GetDescription() string {
 	return "Validates consistency between basic status and detailed status"
 }
 
+// Validate performs status consistency validation on an enhanced act
 func (r *StatusConsistencyRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
@@ -366,7 +371,7 @@ func (r *StatusConsistencyRule) Validate(_ context.Context, act *sejm.EnhancedAc
 	// Validate current stage matches detailed status
 	if act.CurrentStage != "" && act.DetailedStatus != "" {
 		if !r.validateStageStatusMatch(act, &issues) {
-			// Stage mismatch handled by helper function
+			// Stage mismatch was already handled by validateStageStatusMatch
 		}
 	}
 	
@@ -374,7 +379,7 @@ func (r *StatusConsistencyRule) Validate(_ context.Context, act *sejm.EnhancedAc
 }
 
 // validateStageStatusMatch is a helper to validate stage-status consistency
-func (r *StatusConsistencyRule) validateStageStatusMatch(act *sejm.EnhancedAct, issues *[]ValidationIssue) bool {
+func (*StatusConsistencyRule) validateStageStatusMatch(act *sejm.EnhancedAct, issues *[]ValidationIssue) bool {
 	expectedStages := map[string][]string{
 		"submitted":      {"Wpłynął", "Submitted"},
 		"committee_work": {"Komisja", "Committee"},
@@ -403,22 +408,26 @@ func (r *StatusConsistencyRule) validateStageStatusMatch(act *sejm.EnhancedAct, 
 	return false
 }
 
-// Date Validation Rule
+// DateValidationRule validates date fields for logical consistency and reasonable ranges
 type DateValidationRule struct{}
 
+// NewDateValidationRule creates a new DateValidationRule validator
 func NewDateValidationRule() *DateValidationRule {
 	return &DateValidationRule{}
 }
 
-func (r *DateValidationRule) GetName() string {
+// GetName returns the name of the date validation rule
+func (*DateValidationRule) GetName() string {
 	return "date_validation"
 }
 
-func (r *DateValidationRule) GetDescription() string {
+// GetDescription returns the description of the date validation rule
+func (*DateValidationRule) GetDescription() string {
 	return "Validates date fields for logical consistency and reasonable ranges"
 }
 
-func (r *DateValidationRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+// Validate performs date validation on an enhanced act
+func (*DateValidationRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	now := time.Now()
@@ -470,22 +479,26 @@ func (r *DateValidationRule) Validate(_ context.Context, act *sejm.EnhancedAct) 
 	return issues
 }
 
-// Numeric Ranges Validation Rule
+// NumericRangesRule validates numeric fields are within reasonable ranges
 type NumericRangesRule struct{}
 
+// NewNumericRangesRule creates a new NumericRangesRule validator
 func NewNumericRangesRule() *NumericRangesRule {
 	return &NumericRangesRule{}
 }
 
-func (r *NumericRangesRule) GetName() string {
+// GetName returns the name of the numeric ranges validation rule
+func (*NumericRangesRule) GetName() string {
 	return "numeric_ranges"
 }
 
-func (r *NumericRangesRule) GetDescription() string {
+// GetDescription returns the description of the numeric ranges validation rule
+func (*NumericRangesRule) GetDescription() string {
 	return "Validates numeric fields are within reasonable ranges"
 }
 
-func (r *NumericRangesRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+// Validate performs numeric ranges validation on an enhanced act
+func (*NumericRangesRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Validate voting counts
@@ -517,22 +530,26 @@ func (r *NumericRangesRule) Validate(_ context.Context, act *sejm.EnhancedAct) [
 	return issues
 }
 
-// Text Quality Validation Rule
+// TextQualityRule validates text fields for quality and completeness
 type TextQualityRule struct{}
 
+// NewTextQualityRule creates a new TextQualityRule validator
 func NewTextQualityRule() *TextQualityRule {
 	return &TextQualityRule{}
 }
 
-func (r *TextQualityRule) GetName() string {
+// GetName returns the name of the text quality validation rule
+func (*TextQualityRule) GetName() string {
 	return "text_quality"
 }
 
-func (r *TextQualityRule) GetDescription() string {
+// GetDescription returns the description of the text quality validation rule
+func (*TextQualityRule) GetDescription() string {
 	return "Validates text fields for quality and completeness"
 }
 
-func (r *TextQualityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+// Validate performs text quality validation on an enhanced act
+func (*TextQualityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Check for placeholder or incomplete text
@@ -573,22 +590,26 @@ func (r *TextQualityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []V
 	return issues
 }
 
-// Reference Integrity Validation Rule
+// ReferenceIntegrityRule validates links and references for accessibility and format
 type ReferenceIntegrityRule struct{}
 
+// NewReferenceIntegrityRule creates a new ReferenceIntegrityRule validator
 func NewReferenceIntegrityRule() *ReferenceIntegrityRule {
 	return &ReferenceIntegrityRule{}
 }
 
-func (r *ReferenceIntegrityRule) GetName() string {
+// GetName returns the name of the reference integrity validation rule
+func (*ReferenceIntegrityRule) GetName() string {
 	return "reference_integrity"
 }
 
-func (r *ReferenceIntegrityRule) GetDescription() string {
+// GetDescription returns the description of the reference integrity validation rule
+func (*ReferenceIntegrityRule) GetDescription() string {
 	return "Validates links and references for accessibility and format"
 }
 
-func (r *ReferenceIntegrityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
+// Validate performs reference integrity validation on an enhanced act
+func (*ReferenceIntegrityRule) Validate(_ context.Context, act *sejm.EnhancedAct) []ValidationIssue {
 	var issues []ValidationIssue
 	
 	// Validate RCL link format
