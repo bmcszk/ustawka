@@ -72,3 +72,7 @@ Key environment variables:
 - Service layer implements timeout management for external API calls
 - Metrics tracking available at `/metrics` endpoint
 - Database schema automatically handles migrations via triggers
+
+## Git Practices
+
+- NEVER commit with "--no-verify"

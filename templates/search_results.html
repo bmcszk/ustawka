@@ -1,0 +1,244 @@
+{{define "search_results"}}
+<div class="search-results-container">
+    <!-- Search Summary -->
+    <div class="search-summary bg-white p-4 rounded-lg shadow mb-6">
+        <div class="flex justify-between items-center">
+            <div class="search-stats">
+                <p class="text-sm text-gray-600">
+                    Znaleziono <strong>{{.FilteredCount}}</strong> z <strong>{{.TotalCount}}</strong> aktów prawnych
+                    <span class="text-xs text-gray-500">(czas wyszukiwania: {{.SearchTime}})</span>
+                </p>
+            </div>
+            
+            <!-- Sort Options -->
+            <div class="sort-controls flex items-center space-x-2">
+                <label class="text-sm text-gray-600">Sortuj:</label>
+                <select id="sortSelect" class="text-sm border rounded px-2 py-1">
+                    <option value="date:desc">Data (najnowsze)</option>
+                    <option value="date:asc">Data (najstarsze)</option>
+                    <option value="title:asc">Tytuł (A-Z)</option>
+                    <option value="title:desc">Tytuł (Z-A)</option>
+                    <option value="days_in_stage:desc">Najdłużej w etapie</option>
+                    <option value="days_in_stage:asc">Najkrócej w etapie</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Results Grid -->
+    <div class="search-results-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{range .Acts}}
+        <div class="act-result-card bg-white p-4 rounded-lg shadow hover:shadow-lg transition-shadow border-l-4 
+                    {{if eq .Status "obowiązujący"}}border-green-500{{else if eq .DetailedStatus "in_force"}}border-green-500
+                    {{else if eq .DetailedStatus "committee_work"}}border-purple-500
+                    {{else if eq .DetailedStatus "submitted"}}border-blue-500
+                    {{else if eq .DetailedStatus "senate_review"}}border-orange-500
+                    {{else if eq .DetailedStatus "presidential_review"}}border-red-500
+                    {{else}}border-gray-500{{end}}">
+            
+            <!-- Act Header -->
+            <div class="act-header mb-3">
+                <h3 class="font-semibold text-gray-900 text-sm leading-tight mb-1">
+                    <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" 
+                       hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}" 
+                       hx-target="#act-details" 
+                       hx-swap="innerHTML"
+                       class="hover:text-blue-600 transition-colors">
+                        {{.Title}}
+                    </a>
+                </h3>
+                
+                <div class="flex justify-between items-center text-xs text-gray-500">
+                    <span class="act-id">{{.ID}}</span>
+                    <span class="act-year">{{.Year}}</span>
+                </div>
+            </div>
+
+            <!-- Act Status and Stage -->
+            <div class="act-status mb-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="status-badge px-2 py-1 rounded-full text-xs font-medium
+                                 {{if eq .Status "obowiązujący"}}bg-green-100 text-green-800
+                                 {{else if eq .Status "pending"}}bg-yellow-100 text-yellow-800
+                                 {{else if eq .Status "uchylony"}}bg-red-100 text-red-800
+                                 {{else}}bg-gray-100 text-gray-800{{end}}">
+                        {{.Status}}
+                    </span>
+                    
+                    {{if .DaysInStage}}
+                    <span class="days-in-stage text-xs text-gray-600">
+                        {{.DaysInStage}} dni w etapie
+                    </span>
+                    {{end}}
+                </div>
+                
+                {{if .CurrentStage}}
+                <p class="current-stage text-xs text-gray-700 bg-gray-50 rounded px-2 py-1">
+                    Etap: {{.CurrentStage}}
+                </p>
+                {{end}}
+            </div>
+
+            <!-- Act Metadata -->
+            <div class="act-metadata space-y-1 mb-3">
+                {{if .InitiatorType}}
+                <div class="flex items-center text-xs text-gray-600">
+                    <span class="w-16 flex-shrink-0">Inicjator:</span>
+                    <span class="text-gray-800">{{.InitiatorType}}</span>
+                </div>
+                {{end}}
+                
+                {{if .CommitteeCode}}
+                <div class="flex items-center text-xs text-gray-600">
+                    <span class="w-16 flex-shrink-0">Komisja:</span>
+                    <span class="text-gray-800">{{.CommitteeCode}}</span>
+                </div>
+                {{end}}
+                
+                {{if .StageDate}}
+                <div class="flex items-center text-xs text-gray-600">
+                    <span class="w-16 flex-shrink-0">Data etapu:</span>
+                    <span class="text-gray-800">{{.StageDate.Format "2006-01-02"}}</span>
+                </div>
+                {{end}}
+            </div>
+
+            <!-- Voting Information -->
+            {{if or .SejmVotes .SenateVotes}}
+            <div class="voting-info mb-3 p-2 bg-gray-50 rounded">
+                {{if .SejmVotes}}
+                <div class="sejm-votes text-xs mb-1">
+                    <span class="font-medium text-gray-700">Sejm:</span>
+                    {{range .SejmVotes}}
+                    <span class="vote-counts">
+                        {{.YesVotes}}✓ {{.NoVotes}}✗ {{.AbstainVotes}}~
+                    </span>
+                    {{end}}
+                </div>
+                {{end}}
+                
+                {{if .SenateVotes}}
+                <div class="senate-votes text-xs">
+                    <span class="font-medium text-gray-700">Senat:</span>
+                    {{range .SenateVotes}}
+                    <span class="vote-counts">
+                        {{.YesVotes}}✓ {{.NoVotes}}✗ {{.AbstainVotes}}~
+                    </span>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+            {{end}}
+
+            <!-- Tags -->
+            {{if .Tags}}
+            <div class="act-tags flex flex-wrap gap-1 mb-3">
+                {{range .Tags}}
+                <span class="tag text-xs bg-blue-100 text-blue-800 rounded px-2 py-1">{{.}}</span>
+                {{end}}
+            </div>
+            {{end}}
+
+            <!-- Action Buttons -->
+            <div class="act-actions flex justify-between items-center pt-2 border-t border-gray-200">
+                <a href="/acts/DU/{{.GetYearString}}/{{.Position}}" 
+                   hx-get="/acts/DU/{{.GetYearString}}/{{.Position}}" 
+                   hx-target="#act-details" 
+                   hx-swap="innerHTML"
+                   class="text-xs bg-blue-500 text-white rounded px-3 py-1 hover:bg-blue-600 transition-colors">
+                    Szczegóły
+                </a>
+                
+                {{if .RCLLink}}
+                <a href="{{.RCLLink}}" target="_blank" 
+                   class="text-xs text-blue-600 hover:text-blue-800 underline">
+                    RCL ↗
+                </a>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Pagination -->
+    {{if gt .FilteredCount 50}}
+    <div class="pagination-controls mt-6 flex justify-center">
+        <div class="flex items-center space-x-2">
+            <!-- Previous Page -->
+            <button class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                    onclick="loadSearchPage(getCurrentPage() - 1)"
+                    {{if eq .Offset 0}}disabled{{end}}>
+                Poprzednia
+            </button>
+            
+            <!-- Page Numbers -->
+            <div class="page-numbers flex space-x-1">
+                <!-- Page numbers will be generated by JavaScript based on current results -->
+            </div>
+            
+            <!-- Next Page -->
+            <button class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                    onclick="loadSearchPage(getCurrentPage() + 1)"
+                    {{if lt (add .Offset 50) .FilteredCount}}disabled{{end}}>
+                Następna
+            </button>
+        </div>
+    </div>
+    {{end}}
+
+    <!-- No Results Message -->
+    {{if eq .FilteredCount 0}}
+    <div class="no-results text-center py-12">
+        <div class="text-gray-400 text-6xl mb-4">🔍</div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Brak wyników</h3>
+        <p class="text-gray-600 mb-4">Nie znaleziono aktów prawnych spełniających kryteria wyszukiwania.</p>
+        <div class="suggestions text-sm text-gray-500">
+            <p>Spróbuj:</p>
+            <ul class="mt-2 space-y-1">
+                <li>• Użyć mniej specyficznych słów kluczowych</li>
+                <li>• Usunąć niektóre filtry</li>
+                <li>• Sprawdzić pisownię</li>
+                <li>• Rozszerzyć zakres dat</li>
+            </ul>
+        </div>
+    </div>
+    {{end}}
+</div>
+
+<script>
+    // Search results JavaScript functionality
+    function getCurrentPage() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const offset = parseInt(urlParams.get('offset') || '0');
+        return Math.floor(offset / 50) + 1;
+    }
+    
+    function loadSearchPage(page) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('offset', (page - 1) * 50);
+        
+        const newUrl = '/api/search?' + urlParams.toString();
+        htmx.ajax('GET', newUrl, {
+            target: '#search-results',
+            swap: 'innerHTML',
+            headers: { 'HX-Request': 'true' }
+        });
+    }
+    
+    // Sort functionality
+    document.getElementById('sortSelect')?.addEventListener('change', function() {
+        const [sortBy, sortOrder] = this.value.split(':');
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('sort', sortBy);
+        urlParams.set('order', sortOrder);
+        urlParams.set('offset', '0'); // Reset to first page
+        
+        const newUrl = '/api/search?' + urlParams.toString();
+        htmx.ajax('GET', newUrl, {
+            target: '#search-results',
+            swap: 'innerHTML',
+            headers: { 'HX-Request': 'true' }
+        });
+    });
+</script>
+{{end}}
