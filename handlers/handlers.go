@@ -152,12 +152,15 @@ func (h *Handler) ViewActDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	details, err := h.actService.GetActDetails(r.Context(), year, position)
+	details, err := h.actService.GetEnhancedActDetails(r.Context(), year, position)
 	if err != nil {
 		slog.Error("Error fetching act details", "error", err)
 		http.Error(w, "Failed to fetch act details", http.StatusInternalServerError)
 		return
 	}
+
+	// Debug log to check the type
+	slog.Info("ViewActDetails returning type", "type", fmt.Sprintf("%T", details))
 
 	err = h.templates.ExecuteTemplate(w, "base.html", details)
 	if err != nil {

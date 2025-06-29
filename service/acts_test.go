@@ -45,6 +45,31 @@ func (m *MockSejmClient) GetActDetails(ctx context.Context, actID string) (*sejm
 	return details, args.Error(1)
 }
 
+func (m *MockSejmClient) GetParliamentaryProcesses(ctx context.Context, term int) ([]sejm.ParliamentaryProcess, error) {
+	args := m.Called(ctx, term)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	processes, ok := args.Get(0).([]sejm.ParliamentaryProcess)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return processes, args.Error(1)
+}
+
+func (m *MockSejmClient) GetParliamentaryProcess(ctx context.Context, term int, 
+	processNumber string) (*sejm.ParliamentaryProcess, error) {
+	args := m.Called(ctx, term, processNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	process, ok := args.Get(0).(*sejm.ParliamentaryProcess)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return process, args.Error(1)
+}
+
 // MockDB is a mock implementation of the database
 type MockDB struct {
 	mock.Mock
@@ -123,6 +148,46 @@ func (m *MockDB) GetEnhancedActByID(ctx context.Context, actID string) (*sejm.En
 		return nil, args.Error(1)
 	}
 	return act, args.Error(1)
+}
+
+func (m *MockDB) GetParliamentaryProcesses(ctx context.Context, term int) ([]sejm.ParliamentaryProcess, error) {
+	args := m.Called(ctx, term)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	processes, ok := args.Get(0).([]sejm.ParliamentaryProcess)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return processes, args.Error(1)
+}
+
+func (m *MockDB) StoreParliamentaryProcesses(ctx context.Context, term int, 
+	processes []sejm.ParliamentaryProcess) error {
+	args := m.Called(ctx, term, processes)
+	return args.Error(0)
+}
+
+func (m *MockDB) GetParliamentaryProcessByNumber(ctx context.Context, term int, 
+	processNumber string) (*sejm.ParliamentaryProcess, error) {
+	args := m.Called(ctx, term, processNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	process, ok := args.Get(0).(*sejm.ParliamentaryProcess)
+	if !ok {
+		return nil, args.Error(1)
+	}
+	return process, args.Error(1)
+}
+
+func (m *MockDB) GetParliamentaryProcessCacheAge(ctx context.Context, term int) (time.Duration, error) {
+	args := m.Called(ctx, term)
+	duration, ok := args.Get(0).(time.Duration)
+	if !ok {
+		return 0, args.Error(1)
+	}
+	return duration, args.Error(1)
 }
 
 func TestGetAvailableYears(t *testing.T) {
@@ -275,8 +340,14 @@ func TestGetActsByYear(t *testing.T) {
 		{
 			name: "Data from cache",
 			year: 2024,
-			setupMocks: func(_ *MockSejmClient, md *MockDB) {
+			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				// Mock parliamentary process cache check (cache miss) and API call (empty result)
+				md.On("GetParliamentaryProcessCacheAge", mock.Anything, 11).Return(25*time.Hour, nil).Once()
+				mc.On("GetParliamentaryProcesses", mock.Anything, 11).Return([]sejm.ParliamentaryProcess{}, nil).Once()
+				md.On("StoreParliamentaryProcesses", mock.Anything, 11, mock.Anything).Return(nil).Once()
+				// Mock enhanced acts check
 				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
+				// Mock regular acts cache check
 				md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
 				md.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
 					{ID: "DU/2024/1", Status: "obowiązujący"},
@@ -302,6 +373,10 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Cache expired, data from API",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				// Mock parliamentary process cache check (cache miss) and API call (empty result)
+				md.On("GetParliamentaryProcessCacheAge", mock.Anything, 11).Return(25*time.Hour, nil).Once()
+				mc.On("GetParliamentaryProcesses", mock.Anything, 11).Return([]sejm.ParliamentaryProcess{}, nil).Once()
+				md.On("StoreParliamentaryProcesses", mock.Anything, 11, mock.Anything).Return(nil).Once()
 				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(25*time.Hour, nil).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
@@ -328,6 +403,10 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Cache error, data from API",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				// Mock parliamentary process cache check (cache miss) and API call (empty result)
+				md.On("GetParliamentaryProcessCacheAge", mock.Anything, 11).Return(25*time.Hour, nil).Once()
+				mc.On("GetParliamentaryProcesses", mock.Anything, 11).Return([]sejm.ParliamentaryProcess{}, nil).Once()
+				md.On("StoreParliamentaryProcesses", mock.Anything, 11, mock.Anything).Return(nil).Once()
 				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(0*time.Hour, errors.New("cache error")).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{
@@ -353,6 +432,10 @@ func TestGetActsByYear(t *testing.T) {
 			name: "Cache read error, data from API",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				// Mock parliamentary process cache check (cache miss) and API call (empty result)
+				md.On("GetParliamentaryProcessCacheAge", mock.Anything, 11).Return(25*time.Hour, nil).Once()
+				mc.On("GetParliamentaryProcesses", mock.Anything, 11).Return([]sejm.ParliamentaryProcess{}, nil).Once()
+				md.On("StoreParliamentaryProcesses", mock.Anything, 11, mock.Anything).Return(nil).Once()
 				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(1*time.Hour, nil).Once()
 				md.On("GetActs", mock.Anything, 2024).Return(nil, errors.New("cache read error")).Once()
@@ -379,6 +462,10 @@ func TestGetActsByYear(t *testing.T) {
 			name: "API error",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				// Mock parliamentary process cache check (cache miss) and API call (empty result)
+				md.On("GetParliamentaryProcessCacheAge", mock.Anything, 11).Return(25*time.Hour, nil).Once()
+				mc.On("GetParliamentaryProcesses", mock.Anything, 11).Return([]sejm.ParliamentaryProcess{}, nil).Once()
+				md.On("StoreParliamentaryProcesses", mock.Anything, 11, mock.Anything).Return(nil).Once()
 				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(25*time.Hour, nil).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return(nil, errors.New("API error")).Once()
@@ -391,6 +478,10 @@ func TestGetActsByYear(t *testing.T) {
 			name: "No data available",
 			year: 2024,
 			setupMocks: func(mc *MockSejmClient, md *MockDB) {
+				// Mock parliamentary process cache check (cache miss) and API call (empty result)
+				md.On("GetParliamentaryProcessCacheAge", mock.Anything, 11).Return(25*time.Hour, nil).Once()
+				mc.On("GetParliamentaryProcesses", mock.Anything, 11).Return([]sejm.ParliamentaryProcess{}, nil).Once()
+				md.On("StoreParliamentaryProcesses", mock.Anything, 11, mock.Anything).Return(nil).Once()
 				md.On("GetEnhancedActs", mock.Anything, 2024).Return([]sejm.EnhancedAct{}, nil).Once()
 				md.On("GetCacheAge", mock.Anything, 2024).Return(25*time.Hour, nil).Once()
 				mc.On("GetActs", mock.Anything, 2024).Return([]sejm.Act{}, nil).Once()

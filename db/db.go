@@ -101,6 +101,21 @@ func createTables(db *sql.DB) error {
 		BEGIN
 			UPDATE act_details SET updated_at = datetime('now') WHERE id = NEW.id;
 		END`,
+		`CREATE TABLE IF NOT EXISTS parliamentary_processes (
+			term INTEGER NOT NULL,
+			process_number TEXT NOT NULL,
+			process_data TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+			PRIMARY KEY (term, process_number)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_parliamentary_processes_term ON parliamentary_processes(term)`,
+		`CREATE TRIGGER IF NOT EXISTS update_parliamentary_processes_timestamp 
+		AFTER UPDATE ON parliamentary_processes
+		BEGIN
+			UPDATE parliamentary_processes SET updated_at = datetime('now') 
+		WHERE term = NEW.term AND process_number = NEW.process_number;
+		END`,
 	}
 
 	for _, query := range queries {
@@ -376,5 +391,163 @@ func (db *DB) GetCacheAge(ctx context.Context, year int) (time.Duration, error) 
 		return 0, err
 	}
 
+	return time.Since(t), nil
+}
+
+// Parliamentary Process database operations
+
+// GetParliamentaryProcesses retrieves parliamentary processes for a specific term from the cache
+func (db *DB) GetParliamentaryProcesses(ctx context.Context, term int) ([]sejm.ParliamentaryProcess, error) {
+	rows, err := db.queryParliamentaryProcessRows(ctx, term)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Error closing rows", "error", err)
+		}
+	}()
+	
+	return db.scanParliamentaryProcesses(rows)
+}
+
+func (db *DB) queryParliamentaryProcessRows(ctx context.Context, term int) (*sql.Rows, error) {
+	query := `SELECT process_data FROM parliamentary_processes WHERE term = ? ORDER BY updated_at DESC`
+	return db.QueryContext(ctx, query, term)
+}
+
+func (db *DB) scanParliamentaryProcesses(rows *sql.Rows) ([]sejm.ParliamentaryProcess, error) {
+	var processes []sejm.ParliamentaryProcess
+	for rows.Next() {
+		process, err := db.scanSingleParliamentaryProcess(rows)
+		if err != nil {
+			return nil, err
+		}
+		if process != nil {
+			processes = append(processes, *process)
+		}
+	}
+	return processes, rows.Err()
+}
+
+func (*DB) scanSingleParliamentaryProcess(rows *sql.Rows) (*sejm.ParliamentaryProcess, error) {
+	var processData string
+	if err := rows.Scan(&processData); err != nil {
+		return nil, err
+	}
+	
+	var process sejm.ParliamentaryProcess
+	if err := json.Unmarshal([]byte(processData), &process); err != nil {
+		slog.Error("Failed to unmarshal parliamentary process", "error", err)
+		return nil, nil // Skip invalid processes
+	}
+	
+	return &process, nil
+}
+
+// StoreParliamentaryProcesses stores parliamentary processes for a specific term in the cache
+func (db *DB) StoreParliamentaryProcesses(ctx context.Context, term int, processes []sejm.ParliamentaryProcess) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			slog.Error("Error rolling back transaction", "error", err)
+		}
+	}()
+	
+	if err := db.clearExistingProcesses(ctx, tx, term); err != nil {
+		return err
+	}
+	
+	if err := db.insertParliamentaryProcesses(ctx, tx, term, processes); err != nil {
+		return err
+	}
+	
+	return tx.Commit()
+}
+
+func (*DB) clearExistingProcesses(ctx context.Context, tx *sql.Tx, term int) error {
+	_, err := tx.ExecContext(ctx, "DELETE FROM parliamentary_processes WHERE term = ?", term)
+	return err
+}
+
+func (db *DB) insertParliamentaryProcesses(ctx context.Context, tx *sql.Tx, term int, 
+	processes []sejm.ParliamentaryProcess) error {
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO parliamentary_processes (term, process_number, process_data, updated_at)
+		VALUES (?, ?, ?, datetime('now'))
+	`)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			slog.Error("Error closing statement", "error", err)
+		}
+	}()
+	
+	for _, process := range processes {
+		if err := db.insertSingleProcess(ctx, stmt, term, process); err != nil {
+			return err
+		}
+	}
+	
+	return nil
+}
+
+func (*DB) insertSingleProcess(ctx context.Context, stmt *sql.Stmt, term int, 
+	process sejm.ParliamentaryProcess) error {
+	processData, err := json.Marshal(process)
+	if err != nil {
+		return fmt.Errorf("failed to marshal process %s: %w", process.Number, err)
+	}
+	
+	_, err = stmt.ExecContext(ctx, term, process.Number, string(processData))
+	return err
+}
+
+// GetParliamentaryProcessByNumber retrieves a specific parliamentary process by number
+func (db *DB) GetParliamentaryProcessByNumber(ctx context.Context, term int, 
+	processNumber string) (*sejm.ParliamentaryProcess, error) {
+	query := `SELECT process_data FROM parliamentary_processes WHERE term = ? AND process_number = ?`
+	
+	var processData string
+	err := db.QueryRowContext(ctx, query, term, processNumber).Scan(&processData)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	
+	var process sejm.ParliamentaryProcess
+	if err := json.Unmarshal([]byte(processData), &process); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal parliamentary process: %w", err)
+	}
+	
+	return &process, nil
+}
+
+// GetParliamentaryProcessCacheAge returns the age of the parliamentary process cache for a specific term
+func (db *DB) GetParliamentaryProcessCacheAge(ctx context.Context, term int) (time.Duration, error) {
+	var updatedAt sql.NullString
+	err := db.QueryRowContext(ctx,
+		"SELECT strftime('%Y-%m-%d %H:%M:%f', MAX(updated_at)) FROM parliamentary_processes WHERE term = ?",
+		term,
+	).Scan(&updatedAt)
+	if err == sql.ErrNoRows || !updatedAt.Valid {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	
+	t, err := time.Parse("2006-01-02 15:04:05.999999999", updatedAt.String)
+	if err != nil {
+		return 0, err
+	}
+	
 	return time.Since(t), nil
 }

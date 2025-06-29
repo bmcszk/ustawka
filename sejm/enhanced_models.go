@@ -3,6 +3,9 @@ package sejm
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -334,4 +337,354 @@ func (als *ActLinkingService) LinkSenateToSejm(_ context.Context, sejmAct *Enhan
 func (*ActLinkingService) matchActToVote(act *EnhancedAct, vote SenateVotingRecord) bool {
 	// Simple title matching - could be enhanced with more sophisticated matching
 	return act.Title == vote.Subject || act.ID == vote.ActID
+}
+
+// GetYearString returns the year as a string for template rendering
+func (e *EnhancedAct) GetYearString() string {
+	if e.Year == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d", e.Year)
+}
+
+// ParliamentaryProcess represents an active legislative process from the Sejm API
+type ParliamentaryProcess struct {
+	Number                  string                     `json:"number"`
+	Title                   string                     `json:"title"`
+	TitleFinal              string                     `json:"titleFinal,omitempty"`
+	DocumentType            string                     `json:"documentType"`
+	DocumentDate            string                     `json:"documentDate"`
+	ProcessStartDate        string                     `json:"processStartDate"`
+	ChangeDate              string                     `json:"changeDate"`
+	ClosureDate             string                     `json:"closureDate,omitempty"`
+	Passed                  bool                       `json:"passed"`
+	ELI                     string                     `json:"ELI,omitempty"`
+	Address                 string                     `json:"address,omitempty"`
+	DisplayAddress          string                     `json:"displayAddress,omitempty"`
+	Term                    int                        `json:"term"`
+	UrgencyStatus           string                     `json:"urgencyStatus"`
+	ShortenProcedure        bool                       `json:"shortenProcedure"`
+	LegislativeCommittee    bool                       `json:"legislativeCommittee"`
+	PrincipleOfSubsidiarity bool                       `json:"principleOfSubsidiarity"`
+	UE                      string                     `json:"UE"`
+	Comments                string                     `json:"comments,omitempty"`
+	Description             string                     `json:"description,omitempty"`
+	Stages                  []ParliamentaryStage       `json:"stages"`
+	PrintsConsideredJointly []string                   `json:"printsConsideredJointly,omitempty"`
+	Links                   []ParliamentaryLink        `json:"links,omitempty"`
+	WebGeneratedDate        string                     `json:"webGeneratedDate"`
+}
+
+// ParliamentaryStage represents a stage in the legislative process
+type ParliamentaryStage struct {
+	Date         string                      `json:"date"`
+	StageName    string                      `json:"stageName"`
+	PrintNumber  string                      `json:"printNumber,omitempty"`
+	SittingNum   int                         `json:"sittingNum,omitempty"`
+	Children     []ParliamentaryStageChild   `json:"children,omitempty"`
+}
+
+// ParliamentaryStageChild represents a sub-stage (like committee referral)
+type ParliamentaryStageChild struct {
+	Date           string `json:"date"`
+	StageName      string `json:"stageName"`
+	CommitteeCode  string `json:"committeeCode,omitempty"`
+	Type           string `json:"type"`
+}
+
+// ParliamentaryLink represents a link to external resources
+type ParliamentaryLink struct {
+	Href string `json:"href"`
+	Rel  string `json:"rel"`
+}
+
+// ParliamentaryStageMapping maps parliamentary stage names to Kanban column names
+var ParliamentaryStageMapping = map[string]string{
+	// Initial submission
+	"Projekt wpłynął do Sejmu":                           "submitted",
+	"Projekt wpłynął do Senatu":                          "submitted",
+	
+	// Committee work
+	"Skierowanie do komisji":                             "committee_work",
+	"Skierowano do komisji":                              "committee_work", 
+	"Komisja zakończyła prace":                           "committee_work",
+	"Posiedzenie komisji":                                "committee_work",
+	
+	// Sejm readings
+	"Skierowano do I czytania na posiedzeniu Sejmu":      "sejm_readings",
+	"I czytanie na posiedzeniu Sejmu":                    "sejm_readings",
+	"II czytanie na posiedzeniu Sejmu":                   "sejm_readings",
+	"III czytanie na posiedzeniu Sejmu":                  "sejm_readings",
+	"Przegłosowanie w Sejmie":                            "sejm_readings",
+	"Uchwalono":                                          "sejm_readings",
+	
+	// Senate review
+	"Przekazano do Senatu":                               "senate_review",
+	"Wpłynął do Senatu":                                  "senate_review",
+	"Posiedzenie Senatu":                                 "senate_review",
+	"Senat nie wniósł poprawek":                          "senate_review",
+	"Senat wniósł poprawki":                              "senate_review",
+	"Senat odrzucił ustawę":                              "senate_review",
+	
+	// Presidential review
+	"Przekazano do Prezydenta":                           "presidential_review",
+	"Prezydent podpisał":                                 "presidential_review",
+	"Prezydent zawetował":                                "presidential_review",
+	"Odrzucenie weta":                                    "presidential_review",
+	
+	// Publication and completion
+	"Opublikowano w Dzienniku Ustaw":                     "published",
+	"Ustawa weszła w życie":                              "in_force",
+	"Uchwalono uchwałę":                                  "published",
+}
+
+// ConvertParliamentaryProcessToEnhancedAct converts parliamentary process to EnhancedAct
+func ConvertParliamentaryProcessToEnhancedAct(process *ParliamentaryProcess) *EnhancedAct {
+	// Determine current stage and status
+	currentStage, detailedStatus := determineProcessStage(process)
+	
+	// Parse year from process number or document date
+	year := extractYearFromProcess(process)
+	
+	enhanced := &EnhancedAct{
+		ID:                  process.ELI,
+		Title:               process.Title,
+		Status:              mapProcessStatusToBasic(process),
+		Published:           process.DocumentDate,
+		Position:            parsePositionFromNumber(process.Number),
+		Year:                year,
+		Type:                mapDocumentTypeToType(process.DocumentType),
+		Address:             process.Address,
+		DetailedStatus:      detailedStatus,
+		CurrentStage:        currentStage,
+		StageDate:           parseLastStageDate(process),
+		DaysInStage:         calculateDaysInCurrentStage(process),
+		InitiatorType:       determineInitiatorFromDocumentType(process.DocumentType),
+		CommitteeCode:       extractCommitteeFromStages(process.Stages),
+		UrgencyStatus:       strings.ToLower(process.UrgencyStatus),
+		EUCompliance:        process.PrincipleOfSubsidiarity || process.UE == "YES",
+		ProcessPrintNumber:  process.Number,
+		Stages:              convertParliamentaryStages(process.Stages),
+		Tags:                generateParliamentaryTags(process),
+		Links:               generateParliamentaryLinks(process),
+	}
+	
+	return enhanced
+}
+
+// Helper functions for conversion
+func determineProcessStage(process *ParliamentaryProcess) (stageName, detailedStatus string) {
+	if len(process.Stages) == 0 {
+		return "submitted", "submitted"
+	}
+	
+	// Get the last stage
+	lastStage := process.Stages[len(process.Stages)-1]
+	stageName = lastStage.StageName
+	
+	// Map to detailed status
+	if mappedStatus, ok := ParliamentaryStageMapping[stageName]; ok {
+		return stageName, mappedStatus
+	}
+	
+	// Default based on closure status
+	if process.ClosureDate != "" {
+		if process.Passed {
+			return "Completed", "published"
+		}
+		return "Rejected", "rejected"
+	}
+	
+	return stageName, "submitted"
+}
+
+func extractYearFromProcess(process *ParliamentaryProcess) int {
+	// Try to extract from document date first
+	if process.DocumentDate != "" {
+		if date, err := time.Parse("2006-01-02", process.DocumentDate); err == nil {
+			year := date.Year()
+			slog.Debug("Extracted year from document date", "year", year, 
+				"document_date", process.DocumentDate, "process", process.Number)
+			return year
+		}
+	}
+	
+	// Fallback to current year
+	currentYear := time.Now().Year()
+	slog.Debug("Using current year for process", "year", currentYear, 
+		"process", process.Number, "document_date", process.DocumentDate)
+	return currentYear
+}
+
+func mapProcessStatusToBasic(process *ParliamentaryProcess) string {
+	if process.ClosureDate != "" {
+		if process.Passed {
+			return "uchwalono"
+		}
+		return "odrzucono"
+	}
+	return "w toku"
+}
+
+func mapDocumentTypeToType(documentType string) string {
+	switch documentType {
+	case "projekt ustawy":
+		return "ustawa"
+	case "projekt uchwały":
+		return "uchwała"
+	case "projekt rozporządzenia":
+		return "rozporządzenie"
+	default:
+		return documentType
+	}
+}
+
+func parsePositionFromNumber(number string) int {
+	if pos, err := fmt.Sscanf(number, "%d", new(int)); err == nil && pos == 1 {
+		var result int
+		if _, err := fmt.Sscanf(number, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return 0
+}
+
+func parseLastStageDate(process *ParliamentaryProcess) time.Time {
+	if len(process.Stages) == 0 {
+		if process.ProcessStartDate != "" {
+			if date, err := time.Parse("2006-01-02", process.ProcessStartDate); err == nil {
+				return date
+			}
+		}
+		return time.Time{}
+	}
+	
+	lastStage := process.Stages[len(process.Stages)-1]
+	if date, err := time.Parse("2006-01-02", lastStage.Date); err == nil {
+		return date
+	}
+	
+	return time.Time{}
+}
+
+func calculateDaysInCurrentStage(process *ParliamentaryProcess) int {
+	stageDate := parseLastStageDate(process)
+	if stageDate.IsZero() {
+		return 0
+	}
+	return int(time.Since(stageDate).Hours() / 24)
+}
+
+func determineInitiatorFromDocumentType(documentType string) string {
+	switch {
+	case strings.Contains(strings.ToLower(documentType), "rządowy"):
+		return "government"
+	case strings.Contains(strings.ToLower(documentType), "poselski"):
+		return "deputy"
+	case strings.Contains(strings.ToLower(documentType), "senacki"):
+		return "senate"
+	case strings.Contains(strings.ToLower(documentType), "obywatelski"):
+		return "citizen"
+	default:
+		return "unknown"
+	}
+}
+
+func extractCommitteeFromStages(stages []ParliamentaryStage) string {
+	for _, stage := range stages {
+		for _, child := range stage.Children {
+			if child.CommitteeCode != "" {
+				return child.CommitteeCode
+			}
+		}
+	}
+	return ""
+}
+
+func convertParliamentaryStages(stages []ParliamentaryStage) []ProcessStage {
+	var converted []ProcessStage
+	
+	for _, stage := range stages {
+		stageDate, _ := time.Parse("2006-01-02", stage.Date)
+		
+		processStage := ProcessStage{
+			StageName: stage.StageName,
+			StageDate: stageDate,
+			IsCurrent: false, // Will be determined later
+		}
+		
+		// Add committee info if available
+		for _, child := range stage.Children {
+			if child.CommitteeCode != "" {
+				processStage.CommitteeName = child.CommitteeCode
+			}
+		}
+		
+		converted = append(converted, processStage)
+	}
+	
+	// Mark the last stage as current if process is ongoing
+	if len(converted) > 0 {
+		converted[len(converted)-1].IsCurrent = true
+	}
+	
+	return converted
+}
+
+func generateParliamentaryTags(process *ParliamentaryProcess) []string {
+	var tags []string
+	
+	if process.UrgencyStatus == "URGENT" {
+		tags = append(tags, "urgent")
+	}
+	
+	if process.PrincipleOfSubsidiarity || process.UE == "YES" {
+		tags = append(tags, "eu-law")
+	}
+	
+	if process.LegislativeCommittee {
+		tags = append(tags, "legislative-committee")
+	}
+	
+	// Add type-based tags
+	switch process.DocumentType {
+	case "projekt ustawy":
+		tags = append(tags, "bill")
+	case "projekt uchwały":
+		tags = append(tags, "resolution")
+	case "projekt rozporządzenia":
+		tags = append(tags, "regulation")
+	}
+	
+	// Add initiator tags
+	if strings.Contains(strings.ToLower(process.DocumentType), "obywatelski") {
+		tags = append(tags, "citizen-initiative")
+	} else if strings.Contains(strings.ToLower(process.DocumentType), "rządowy") {
+		tags = append(tags, "government-bill")
+	}
+	
+	return tags
+}
+
+func generateParliamentaryLinks(process *ParliamentaryProcess) ActLinks {
+	links := ActLinks{}
+	
+	for _, link := range process.Links {
+		switch link.Rel {
+		case "eli":
+			links.RCLPortal = link.Href
+		case "eli-api":
+			// Could be used for additional API calls
+		case "isap":
+			links.PDFDocument = link.Href
+		}
+	}
+	
+	// Generate Sejm process link
+	if process.Number != "" {
+		links.SejmProcess = fmt.Sprintf("https://www.sejm.gov.pl/sejm%d.nsf/druk.xsp?nr=%s", 
+			process.Term, process.Number)
+	}
+	
+	return links
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -177,8 +178,8 @@ func (ms *MonitoringService) Start(ctx context.Context) error {
 		"check_interval", ms.config.CheckInterval,
 		"monitored_years", ms.config.MonitoredYears)
 	
-	// Initialize snapshot
-	ms.initializeSnapshot(ctx)
+	// Initialize snapshot asynchronously to avoid blocking server startup
+	go ms.initializeSnapshot(ctx)
 	
 	// Start monitoring loop
 	go ms.monitoringLoop(ctx)
@@ -215,10 +216,22 @@ func (ms *MonitoringService) initializeSnapshot(ctx context.Context) {
 
 // processYearForSnapshot processes acts from a specific year for snapshot
 func (ms *MonitoringService) processYearForSnapshot(ctx context.Context, year int) error {
-	acts, err := ms.db.GetEnhancedActs(ctx, year)
+	// Use a separate context with timeout to avoid blocking
+	snapCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	
+	acts, err := ms.db.GetEnhancedActs(snapCtx, year)
 	if err != nil {
+		// If database is locked or busy, skip this year and try later
+		if strings.Contains(err.Error(), "database is locked") {
+			slog.Debug("Database locked during snapshot, skipping year", "year", year)
+			return nil
+		}
 		return err
 	}
+	
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	
 	for _, act := range acts {
 		if ms.shouldMonitorAct(&act) {
@@ -282,8 +295,17 @@ func (ms *MonitoringService) performStatusCheck(ctx context.Context) {
 
 // checkYearForChanges checks a specific year for status changes
 func (ms *MonitoringService) checkYearForChanges(ctx context.Context, year int) ([]*StatusChangeEvent, error) {
-	acts, err := ms.db.GetEnhancedActs(ctx, year)
+	// Use a separate context with timeout to avoid blocking
+	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	
+	acts, err := ms.db.GetEnhancedActs(checkCtx, year)
 	if err != nil {
+		// If database is locked or busy, skip this check
+		if strings.Contains(err.Error(), "database is locked") {
+			slog.Debug("Database locked during status check, skipping year", "year", year)
+			return nil, nil
+		}
 		return nil, err
 	}
 	

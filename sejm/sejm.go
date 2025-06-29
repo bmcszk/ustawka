@@ -350,3 +350,80 @@ func (c *Client) GetVotings(ctx context.Context, term int, proceeding int) ([]an
 	slog.Debug("Successfully fetched votings", "term", term, "proceeding", proceeding, "count", len(votings))
 	return votings, nil
 }
+
+// GetParliamentaryProcesses retrieves all active parliamentary processes for a specific term
+func (c *Client) GetParliamentaryProcesses(ctx context.Context, term int) ([]ParliamentaryProcess, error) {
+	url := fmt.Sprintf("%s/term%d/processes", c.sejmAPIBaseURL, term)
+	slog.Debug("Fetching parliamentary processes", "url", url, "term", term)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching parliamentary processes: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("Error closing response body", "error", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	var processes []ParliamentaryProcess
+	if err := json.Unmarshal(body, &processes); err != nil {
+		return nil, fmt.Errorf("failed to parse parliamentary processes: %v", err)
+	}
+
+	slog.Debug("Successfully fetched parliamentary processes", "term", term, "count", len(processes))
+	return processes, nil
+}
+
+// GetParliamentaryProcess retrieves a specific parliamentary process by number
+func (c *Client) GetParliamentaryProcess(ctx context.Context, term int, 
+	processNumber string) (*ParliamentaryProcess, error) {
+	url := fmt.Sprintf("%s/term%d/processes/%s", c.sejmAPIBaseURL, term, processNumber)
+	slog.Debug("Fetching parliamentary process", "url", url, "term", term, "processNumber", processNumber)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching parliamentary process: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("Error closing response body", "error", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	var process ParliamentaryProcess
+	if err := json.Unmarshal(body, &process); err != nil {
+		return nil, fmt.Errorf("failed to parse parliamentary process: %v", err)
+	}
+
+	slog.Debug("Successfully fetched parliamentary process", "term", term, "processNumber", processNumber)
+	return &process, nil
+}
